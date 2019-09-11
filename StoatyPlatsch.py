@@ -65,18 +65,24 @@ def generate_model(spec):
             composite_model = composite_model + model
     return composite_model, params
 
-def update_spec_from_peaks(spec, model_indicies, peak_widths, **kwargs):
+def update_spec_from_peaks(spec, model_indicies, minimal_height, peak_width, distance, **kwargs):
     x = spec['x']
     y = spec['y']
-    x_range = numpy.max(x) - numpy.min(x)
-    peak_indicies = signal.find_peaks_cwt(y, peak_widths)
+    #x_range = numpy.max(x) - numpy.min(x)
+    #peak_indicies = signal.find_peaks_cwt(y, peak_widths)
+    peak_indicies = signal.find_peaks(y, width = peak_width,
+                                      distance = distance, height= [minimal_height, max(y)])[0]
+    print(peak_indicies)
+    print(numpy.std(y))
+    print(numpy.ceil((numpy.std(y)/len(y))*2))
     numpy.random.shuffle(peak_indicies)
     for peak_indicie, model_indicie in zip(peak_indicies.tolist(), model_indicies):
         model = spec['model'][model_indicie]
         if model['type'] in ['GaussianModel', 'LorentzianModel', 'VoigtModel']:
             params = {
                 'height': y[peak_indicie],
-                'sigma': x_range / len(x) * numpy.min(peak_widths),
+                #'sigma': x_range / len(x) * numpy.min(peak_widths),
+                'sigma': numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
                 'center': x[peak_indicie]
             }
             if 'params' in model:
@@ -96,14 +102,16 @@ def get_best_values(spec, output):
     best_values = output.best_values
     print(best_values)
     centeres = []
-    print('center    model   amplitude     sigma      gamma')
+    sigma = []
+    print('center    model :  amplitude     sigma      gamma')
     for i, model in enumerate(spec['model']):
         prefix = f'm{i}_'
-        if (numpy.floor(best_values[prefix + 'amplitude']) != 0.0 and numpy.floor(best_values[prefix + 'sigma']) < 100):
+        if (numpy.floor(best_values[prefix + 'amplitude']) != 0.0 and numpy.floor(best_values[prefix + 'sigma']) < 50):
             values = ', '.join(f'{best_values[prefix+param]:8.3f}' for param in model_params[model["type"]])
             print(f'[{best_values[prefix+"center"]:3.3f}] {model["type"]:16}: {values}')
             centeres.append(numpy.floor(best_values[prefix + "center"]))
-    return(centeres)
+            sigma.append(best_values[prefix + "sigma"])
+    return([centeres, sigma])
 
 def main():
 
@@ -158,8 +166,8 @@ def main():
     parser.add_argument(
         "--max_peaks",
         metavar='int',
-        default=4,
-        help="Maximal number of possible peaks in a peak profile. [Default: 10]")
+        default=100,
+        help="Maximal number of possible peaks in a peak profile. [Default: 100]")
     parser.add_argument(
         "--peak_model",
         metavar='str',
@@ -168,21 +176,26 @@ def main():
     parser.add_argument(
         "--min_width",
         metavar='int',
-        default=3,
+        default=10,
         help="The parameter defines how many peak the tool will find inside the profile. "
              "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: ]")
     parser.add_argument(
         "--max_width",
         metavar='int',
-        default=20,
+        default=50,
         help="The parameter defines how many peak the tool will find inside the profile. "
              "It defines the distance each peak must be apart. Increasing it might decrease the number (underfit). [Default: ]")
     parser.add_argument(
         "--steps",
         metavar='int',
-        default=5,
+        default=1,
         help="")
-
+    parser.add_argument(
+        "--std",
+        metavar='int',
+        default=1,
+        help="This parameter defines the width of the newly defined peak binding sites. It is the number of standard"
+             "deviations of the undelying modelled distribution.")
 
     ######################
     ##   CHECKS INPUT   ##
@@ -375,7 +388,10 @@ def main():
     x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1]))])
     #y = cov_matrix[9]
     #y = cov_matrix[15]
-    y = cov_matrix[18]
+    #y = cov_matrix[21]
+    #y = cov_matrix[18]
+
+    y = cov_matrix[40]
 
     plt.plot(y)
     plt.xlabel('Relative Nucleotide Position')
@@ -393,11 +409,13 @@ def main():
     peaks_indices_array = [i for i in range(0, args.max_peaks)]
 
     # Peak Detection Plot
-    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, peak_widths=(numpy.linspace(args.min_width, args.max_width, args.steps)))
+    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, minimal_height=10, peak_width=5, distance=20)
 
-    output_table_overview = open('{}/final_tab1.tsv'.format(args.output_folder), "w")
-    output_table_bed = open('{}/final_tab2.bed'.format(args.output_folder), "w")
+    output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
+    output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
+    output_table_new_peaks = open('{}/final_tab_all_peaks.bed'.format(args.output_folder), "w")
 
+    # Check number of potential local maxima
     if( len(peaks_found) != 0 ):
 
         plt.plot(peaks_found, y[peaks_found], "x")
@@ -419,7 +437,7 @@ def main():
 
         # Deconvolution Plot
         fig, ax = plt.subplots()
-        ax.scatter(spec['x'], spec['y'], s=4)
+        ax.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
         components = output.eval_components(x=spec['x'])
         for i, model in enumerate(spec['model']):
             ax.plot(spec['x'], components[f'm{i}_'])
@@ -427,25 +445,42 @@ def main():
 
         # Output
         peaks_in_profile = get_best_values(spec, output)
+        num_deconvoluted_peaks = len(peaks_in_profile[0])
 
-        if ( len(peaks_in_profile) > 1 ):
+        # Check number of potential found peaks
+        if ( num_deconvoluted_peaks > 1 ):
             output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", len(peaks_in_profile), peaks_in_profile))
-            for i in range(0, len(peaks_in_profile)):
-                output_table_bed.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", peaks_in_profile[i],
-                                                                                    peaks_in_profile[i], "peakid_" + str(i),
+            for i in range(0, num_deconvoluted_peaks):
+                output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", peaks_in_profile[0][i],
+                                                                                    peaks_in_profile[0][i], "peakid_" + str(i),
                                                                                     "0.0", "strand"))
+
+                left_right_extension = numpy.floor((peaks_in_profile[1][i] * args.std))
+                start = peaks_in_profile[0][i] - left_right_extension
+                end = peaks_in_profile[0][i] + left_right_extension
+
+                if ( start < 0 ):
+                    start = 0
+
+                #TODO
+                #if ( end > chr_sizes_dict["chr"] ):
+                #    end = chr_sizes_dict["chr"]
+
+                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", start, end, "peakid_" + str(i),
+                                                                                    left_right_extension, "strand"))
         else:
             output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
-            output_table_bed.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
+            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
                                                                            "end", "peakid",
                                                                            "0.0", "strand"))
     else:
         output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
-        output_table_bed.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
+        output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
                                                                        "end", "peakid",
                                                                        "0.0", "strand"))
     output_table_overview.close()
-    output_table_bed.close()
+    output_table_summits.close()
+    output_table_new_peaks.close()
 
 if __name__ == '__main__':
     main()
