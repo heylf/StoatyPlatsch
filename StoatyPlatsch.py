@@ -141,6 +141,8 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
                 if ( std_dict[a] == std_dict[b] and y[a] < y[b] ):
                     peak_to_keep = b
             true_positives.append(peak_to_keep)
+    else:
+        true_positives = peak_indicies
 
     peak_indicies = numpy.array(true_positives)
 
@@ -473,7 +475,12 @@ def main():
     #y = cov_matrix[21]
     #y = cov_matrix[18]
     #y = cov_matrix[47]
-    y = cov_matrix[48]
+    y = cov_matrix[7]
+
+    # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
+    # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
+    x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1])+100)])
+    y = numpy.pad(y, (50, 50), 'constant', constant_values=(0, 0))
 
     plt.plot(y)
     plt.xlabel('Relative Nucleotide Position')
