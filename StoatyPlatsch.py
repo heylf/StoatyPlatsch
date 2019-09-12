@@ -65,16 +65,97 @@ def generate_model(spec):
             composite_model = composite_model + model
     return composite_model, params
 
-def update_spec_from_peaks(spec, model_indicies, minimal_height, peak_width, distance, **kwargs):
+def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, peak_width, distance, std, **kwargs):
     x = spec['x']
     y = spec['y']
-    #x_range = numpy.max(x) - numpy.min(x)
-    #peak_indicies = signal.find_peaks_cwt(y, peak_widths)
-    peak_indicies = signal.find_peaks(y, width = peak_width,
-                                      distance = distance, height= [minimal_height, max(y)])[0]
+
+    # Find maxima and minima
+    found_local_maximas = signal.find_peaks(y, width = peak_width, distance = distance, height= [minimal_height, max(y)])
+
+    # inverse data for local minima
+    inv_y = y * -1
+    found_local_minima = signal.find_peaks(inv_y, width = 2, distance = distance)[0]
+
+    # I had problems with the edges (start and end of the peak profile).
+    # If I have a long stretch of zeros I get possibly not the start and end of the peak as a minimum.
+    diff_y = numpy.diff(y)
+
+    start_index = 1
+    pos = 0
+    while( diff_y[pos] == 0 and pos != (len(diff_y)-1) ):
+        start_index += 1
+        pos += 1
+
+    end_index = len(x)-2
+    pos = len(x)-2
+    while( diff_y[pos] == 0 and pos != 0 ):
+        end_index -= 1
+        pos -= 1
+
+    found_local_minima = numpy.concatenate( ([start_index], found_local_minima, [end_index]) )
+
+    print(found_local_minima)
+
+    peak_indicies = numpy.array(found_local_maximas[0])
+    peak_indicies.sort()
+    print(found_local_maximas)
     print(peak_indicies)
-    print(numpy.std(y))
-    print(numpy.ceil((numpy.std(y)/len(y))*2))
+
+    std_dict = {}
+    num_local_maxima = len(peak_indicies)
+
+    for i in range(0, num_local_maxima):
+        left_local_minimun = 0
+        right_local_minimum = len(x)
+        summit = peak_indicies[i]
+
+        terminate = 1
+        m = 0
+        while( terminate == 1 ):
+            if ( summit > found_local_minima[m] ):
+                left_local_minimun = found_local_minima[m]
+            else:
+                right_local_minimum = found_local_minima[m]
+                terminate = 0
+            m += 1
+            if ( m  == len(found_local_minima) ):
+                terminate = 0
+
+        dist_width = right_local_minimum - left_local_minimun
+
+        # Dist / len(x) * 100 = relative length of peak.
+        # Relative Length / 4 = Variance.
+        # Because Z = (X-mu)/sigma, and I want to have a range of 2*sigma = X-mu, I have Z = 2.
+        # Because I make a relation to the standard normal distribution N(0,1) I have finally 2=X or -2=X.
+        # So to standardize my peak width in accordance to a standard normal distritbuion I have to divide
+        # by a range of 4 (from -2 to 2).
+        std_dict[peak_indicies[i]] = (dist_width / len(x) * 100.0) / std
+
+    # Check if two maximas share the same width.
+    # This happens if one local maxima is actually a false positive.
+    true_positives = []
+    if ( len(peak_indicies) > 1 ):
+        for a in peak_indicies:
+            peak_to_keep = a
+            for b in peak_indicies:
+                if ( std_dict[a] == std_dict[b] and y[a] < y[b] ):
+                    peak_to_keep = b
+            true_positives.append(peak_to_keep)
+
+    peak_indicies = numpy.array(true_positives)
+
+    print(peak_indicies)
+
+    if ( len(peak_indicies) != 0):
+        fig_extremas, ax1 = plt.subplots()
+        ax1.plot(y)
+        ax1.plot(inv_y)
+        ax1.plot(peak_indicies, y[peak_indicies], "o")
+        ax1.plot(found_local_minima, inv_y[found_local_minima], "x")
+        fig_extremas.savefig('{}/profile_peaks.pdf'.format(output_folder))
+
+    print(std_dict)
+
     numpy.random.shuffle(peak_indicies)
     for peak_indicie, model_indicie in zip(peak_indicies.tolist(), model_indicies):
         model = spec['model'][model_indicie]
@@ -82,7 +163,7 @@ def update_spec_from_peaks(spec, model_indicies, minimal_height, peak_width, dis
             params = {
                 'height': y[peak_indicie],
                 #'sigma': x_range / len(x) * numpy.min(peak_widths),
-                'sigma': numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
+                'sigma': std_dict[peak_indicie], #numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
                 'center': x[peak_indicie]
             }
             if 'params' in model:
@@ -106,7 +187,8 @@ def get_best_values(spec, output):
     print('center    model :  amplitude     sigma      gamma')
     for i, model in enumerate(spec['model']):
         prefix = f'm{i}_'
-        if (numpy.floor(best_values[prefix + 'amplitude']) != 0.0 and numpy.floor(best_values[prefix + 'sigma']) < 50):
+        if (numpy.floor(best_values[prefix + 'amplitude']) != 0.0 and
+                numpy.floor(best_values[prefix + 'sigma']) >= 1.0 and numpy.floor(best_values[prefix + 'sigma']) < 50):
             values = ', '.join(f'{best_values[prefix+param]:8.3f}' for param in model_params[model["type"]])
             print(f'[{best_values[prefix+"center"]:3.3f}] {model["type"]:16}: {values}')
             centeres.append(numpy.floor(best_values[prefix + "center"]))
@@ -390,8 +472,8 @@ def main():
     #y = cov_matrix[15]
     #y = cov_matrix[21]
     #y = cov_matrix[18]
-
-    y = cov_matrix[40]
+    #y = cov_matrix[47]
+    y = cov_matrix[48]
 
     plt.plot(y)
     plt.xlabel('Relative Nucleotide Position')
@@ -409,7 +491,7 @@ def main():
     peaks_indices_array = [i for i in range(0, args.max_peaks)]
 
     # Peak Detection Plot
-    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, minimal_height=10, peak_width=5, distance=20)
+    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, args.output_folder, minimal_height=5, peak_width=5, distance=20, std=8)
 
     output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
     output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
@@ -417,9 +499,6 @@ def main():
 
     # Check number of potential local maxima
     if( len(peaks_found) != 0 ):
-
-        plt.plot(peaks_found, y[peaks_found], "x")
-        plt.savefig('{}/profile_peaks.pdf'.format(args.output_folder))
 
         # Check for distributions to be deleted
         dist_index = 0
