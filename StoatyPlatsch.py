@@ -1,23 +1,67 @@
 
-from scipy import signal
-
 import argparse
 import subprocess as sb
+import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import os
 import numpy
-import math
 import sys
 import random
 
 from scipy import optimize, signal
 from lmfit import models
 
-plt.switch_backend('agg')
+font = {'family' : 'serif'}
+matplotlib.rc('font', **font)
 
 ##############
 ##   FUNC   ##
 ##############
+
+def hex_to_RGB(hex):
+  ''' "#FFFFFF" -> [255,255,255] '''
+  # Pass 16 to the integer function for change of base
+  return [int(hex[i:i+2], 16) for i in range(1,6,2)]
+
+
+def RGB_to_hex(RGB):
+  ''' [255,255,255] -> "#FFFFFF" '''
+  # Components need to be integers for hex to make sense
+  RGB = [int(x) for x in RGB]
+  return "#"+"".join(["0{0:x}".format(v) if v < 16 else
+            "{0:x}".format(v) for v in RGB])
+
+def color_dict(gradient):
+  ''' Takes in a list of RGB sub-lists and returns dictionary of
+    colors in RGB and hex form for use in a graphing function
+    defined later on '''
+  return {"hex":[RGB_to_hex(RGB) for RGB in gradient],
+      "r":[RGB[0] for RGB in gradient],
+      "g":[RGB[1] for RGB in gradient],
+      "b":[RGB[2] for RGB in gradient]}
+
+def color_linear_gradient(start_hex, finish_hex="#FFFFFF", n=10):
+  ''' returns a gradient list of (n) colors between
+    two hex colors. start_hex and finish_hex
+    should be the full six-digit color string,
+    inlcuding the number sign ("#FFFFFF") '''
+  # Starting and ending colors in RGB form
+  s = hex_to_RGB(start_hex)
+  f = hex_to_RGB(finish_hex)
+  # Initilize a list of the output colors with the starting color
+  RGB_list = [s]
+  # Calcuate a color at each evenly spaced value of t from 1 to n
+  for t in range(1, n):
+    # Interpolate RGB vector for color at the current value of t
+    curr_vector = [
+      int(s[j] + (float(t)/(n-1))*(f[j]-s[j]))
+      for j in range(3)
+    ]
+    # Add it to our list of output colors
+    RGB_list.append(curr_vector)
+
+  return color_dict(RGB_list)
 
 # Function to obtain the number of lines in a file.
 def get_line_count(file):
@@ -26,7 +70,7 @@ def get_line_count(file):
         count += 1
     return count
 
-def generate_model(spec):
+def generate_model(spec, num_padding):
     composite_model = None
     params = None
     x = spec['x']
@@ -39,22 +83,21 @@ def generate_model(spec):
         prefix = f'm{i}_'
         model = getattr(models, basis_func['type'])(prefix=prefix)
         if basis_func['type'] in ['GaussianModel', 'LorentzianModel', 'VoigtModel']: # for now VoigtModel has gamma constrained to sigma
-            model.set_param_hint('sigma', min=1e-6, max=x_range)
+            # model.set_param_hint('sigma', min=1e-6, max=x_range-num_padding)
+            # model.set_param_hint('center', min=x_min, max=x_max)
+            # model.set_param_hint('height', min=1e-6, max=1.1*y_max)
+            # model.set_param_hint('amplitude', min=1e-6)
+
+            model.set_param_hint('sigma', min=1e-6, max=(x_range-num_padding)/2 )
             model.set_param_hint('center', min=x_min, max=x_max)
             model.set_param_hint('height', min=1e-6, max=1.1*y_max)
             model.set_param_hint('amplitude', min=1e-6)
-            # default guess is horrible!! do not use guess()
-            default_params = {
-                prefix+'center': x_min + x_range * random.random(),
-                prefix+'height': y_max * random.random(),
-                prefix+'sigma': x_range * random.random()
-            }
         else:
             raise NotImplemented(f'model {basis_func["type"]} not implemented yet')
         if 'help' in basis_func:  # allow override of settings in parameter
             for param, options in basis_func['help'].items():
                 model.set_param_hint(param, **options)
-        model_params = model.make_params(**default_params, **basis_func.get('params', {}))
+        model_params = model.make_params(**basis_func.get('params', {}))
         if params is None:
             params = model_params
         else:
@@ -135,25 +178,31 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
     # This happens if one local maxima is actually a false positive.
     true_positives = []
     if ( len(peak_indicies) > 1 ):
-        for a in peak_indicies:
-            peak_to_keep = a
-            for b in peak_indicies:
-                if ( std_dict[a] == std_dict[b] and y[a] < y[b] ):
-                    peak_to_keep = b
-            true_positives.append(peak_to_keep)
+        for a in range(0, len(peak_indicies)):
+            peak_to_keep = peak_indicies[a]
+            for b in range(1, len(peak_indicies)):
+                if ( std_dict[peak_indicies[a]] == std_dict[peak_indicies[b]]
+                        and y[peak_indicies[a]] < y[peak_indicies[b]] ):
+                    peak_to_keep = peak_indicies[b]
+            if ( peak_to_keep not in true_positives ):
+                true_positives.append(peak_to_keep)
     else:
         true_positives = peak_indicies
 
     peak_indicies = numpy.array(true_positives)
 
+    print("Final indices")
     print(peak_indicies)
 
     if ( len(peak_indicies) != 0):
-        fig_extremas, ax1 = plt.subplots()
-        ax1.plot(y)
-        ax1.plot(inv_y)
-        ax1.plot(peak_indicies, y[peak_indicies], "o")
-        ax1.plot(found_local_minima, inv_y[found_local_minima], "x")
+        fig_extremas, ax = plt.subplots()
+        ax.plot(y)
+        ax.plot(inv_y)
+        ax.plot(peak_indicies, y[peak_indicies], "o")
+        ax.plot(found_local_minima, inv_y[found_local_minima], "x")
+        ax.set_xlabel('Relative Nucleotide Position')
+        ax.set_ylabel('Intensity')
+        ax.axes.get_xaxis().set_ticks([])
         fig_extremas.savefig('{}/profile_peaks.pdf'.format(output_folder))
 
     print(std_dict)
@@ -189,12 +238,10 @@ def get_best_values(spec, output):
     print('center    model :  amplitude     sigma      gamma')
     for i, model in enumerate(spec['model']):
         prefix = f'm{i}_'
-        if (numpy.floor(best_values[prefix + 'amplitude']) != 0.0 and
-                numpy.floor(best_values[prefix + 'sigma']) >= 1.0 and numpy.floor(best_values[prefix + 'sigma']) < 50):
-            values = ', '.join(f'{best_values[prefix+param]:8.3f}' for param in model_params[model["type"]])
-            print(f'[{best_values[prefix+"center"]:3.3f}] {model["type"]:16}: {values}')
-            centeres.append(numpy.floor(best_values[prefix + "center"]))
-            sigma.append(best_values[prefix + "sigma"])
+        values = ', '.join(f'{best_values[prefix+param]:8.3f}' for param in model_params[model["type"]])
+        print(f'[{best_values[prefix+"center"]:3.3f}] {model["type"]:16}: {values}')
+        centeres.append(numpy.floor(best_values[prefix + "center"]))
+        sigma.append(best_values[prefix + "sigma"])
     return([centeres, sigma])
 
 def main():
@@ -475,17 +522,23 @@ def main():
     #y = cov_matrix[21]
     #y = cov_matrix[18]
     #y = cov_matrix[47]
-    y = cov_matrix[7]
+    y = cov_matrix[21]
+
+    #TODO
+    #Introduce Regression
 
     # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
     # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-    x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1])+100)])
-    y = numpy.pad(y, (50, 50), 'constant', constant_values=(0, 0))
+    num_padding = 10
+    x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1])+num_padding)])
+    y = numpy.pad(y, (int(num_padding/2), int(num_padding/2)), 'constant', constant_values=(0, 0))
 
-    plt.plot(y)
-    plt.xlabel('Relative Nucleotide Position')
-    plt.ylabel('Intensity')
-    plt.savefig('{}/profile.pdf'.format(args.output_folder))
+    profile_fig, ax = plt.subplots()
+    ax.plot(y)
+    ax.set_xlabel('Relative Nucleotide Position')
+    ax.set_ylabel('Intensity')
+    ax.axes.get_xaxis().set_ticks([])
+    profile_fig.savefig('{}/profile.pdf'.format(args.output_folder))
 
     models_dict_array = [{'type': args.peak_model} for i in range(0,args.max_peaks)]
 
@@ -498,7 +551,7 @@ def main():
     peaks_indices_array = [i for i in range(0, args.max_peaks)]
 
     # Peak Detection Plot
-    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, args.output_folder, minimal_height=5, peak_width=5, distance=20, std=8)
+    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, args.output_folder, minimal_height=5, peak_width=2, distance=10, std=8)
 
     output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
     output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
@@ -516,23 +569,40 @@ def main():
                 dist_index += 1
 
         # Fitting Plot
-        model, params = generate_model(spec)
+        model, params = generate_model(spec, num_padding)
+
+        print("Model")
+        print(model)
+        print("PARAMs")
+        print(params)
+
         output = model.fit(spec['y'], params, x=spec['x'])
         output.plot(data_kws={'markersize': 1})
         plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
 
-        # Deconvolution Plot
-        fig, ax = plt.subplots()
-        ax.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
-        components = output.eval_components(x=spec['x'])
-        for i, model in enumerate(spec['model']):
-            ax.plot(spec['x'], components[f'm{i}_'])
-        fig.savefig('{}/profile_deconvolution.pdf'.format(args.output_folder))
-
-        # Output
+        # Get new peaks
         peaks_in_profile = get_best_values(spec, output)
         num_deconvoluted_peaks = len(peaks_in_profile[0])
+        components = output.eval_components(x=spec['x'])
 
+        # Change Coordinates
+        peak_start_list = [-1] * num_deconvoluted_peaks
+        peak_end_list = [-1] * num_deconvoluted_peaks
+        if (num_deconvoluted_peaks > 1):
+            for i in range(0, num_deconvoluted_peaks):
+                left_right_extension = numpy.floor((peaks_in_profile[1][i] * args.std))
+                peak_start_list[i] = peaks_in_profile[0][i] - left_right_extension
+                peak_end_list[i] = peaks_in_profile[0][i] + left_right_extension
+
+                if ( peak_start_list[i] < 0 ):
+                    peak_start_list[i] = 0
+
+                # TODO
+                # if ( end > chr_sizes_dict["chr"] ):
+                #    end = chr_sizes_dict["chr"]
+
+
+        # Write Output tables
         # Check number of potential found peaks
         if ( num_deconvoluted_peaks > 1 ):
             output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", len(peaks_in_profile), peaks_in_profile))
@@ -541,24 +611,40 @@ def main():
                                                                                     peaks_in_profile[0][i], "peakid_" + str(i),
                                                                                     "0.0", "strand"))
 
-                left_right_extension = numpy.floor((peaks_in_profile[1][i] * args.std))
-                start = peaks_in_profile[0][i] - left_right_extension
-                end = peaks_in_profile[0][i] + left_right_extension
-
-                if ( start < 0 ):
-                    start = 0
-
-                #TODO
-                #if ( end > chr_sizes_dict["chr"] ):
-                #    end = chr_sizes_dict["chr"]
-
-                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", start, end, "peakid_" + str(i),
-                                                                                    left_right_extension, "strand"))
+                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", peak_start_list[i], peak_end_list[i],
+                                                                                     "peakid_" + str(i), "-1", "strand"))
         else:
             output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
             output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
                                                                            "end", "peakid",
                                                                            "0.0", "strand"))
+
+        # Deconvolution Plot
+        # get maximum value of components
+        max_fitted_y = 0
+        for i, model in enumerate(spec['model']):
+            if ( max_fitted_y < numpy.max(components[f'm{i}_']) ):
+                max_fitted_y = numpy.max(components[f'm{i}_'])
+
+        max_y_plot = max_fitted_y
+        if ( max_fitted_y < max(y) ):
+            max_y_plot = max(y)
+
+        c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
+        fig, ax = plt.subplots()
+        for i, model in enumerate(spec['model']):
+            ax.plot(spec['x'], components[f'm{i}_'], color=c[i])
+            rect = patches.Rectangle( (peak_start_list[i], 0),
+                                      width=peak_end_list[i]-peak_start_list[i],
+                                      height=max_y_plot, facecolor=c[i], alpha=0.3)
+            ax.add_patch(rect)
+        ax.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
+        ax.set_xlabel('Relative Nucleotide Position')
+        ax.set_ylabel('Intensity')
+        ax.set_ylim([0, max_y_plot])
+        ax.axes.get_xaxis().set_ticks([])
+        fig.savefig('{}/profile_deconvolution.pdf'.format(args.output_folder))
+
     else:
         output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
         output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
