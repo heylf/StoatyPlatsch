@@ -8,7 +8,6 @@ import os
 import numpy
 import sys
 
-from scipy.interpolate import UnivariateSpline
 from update_spec import update_spec_from_peaks
 from generate_model import generate_model
 from rainbow_colors import color_linear_gradient
@@ -91,20 +90,28 @@ def main():
     parser.add_argument(
         "--min_width",
         metavar='int',
-        default=10,
+        default=5,
         help="The parameter defines how many peak the tool will find inside the profile. "
-             "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: ]")
+             "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: 5]")
     parser.add_argument(
         "--max_width",
         metavar='int',
-        default=50,
+        default=10,
         help="The parameter defines how many peak the tool will find inside the profile. "
-             "It defines the distance each peak must be apart. Increasing it might decrease the number (underfit). [Default: ]")
+             "It defines the distance each peak must be apart. Increasing it might decrease the number (underfit). [Default: 10]")
     parser.add_argument(
-        "--steps",
+        "--min_height",
         metavar='int',
-        default=1,
-        help="")
+        default=5,
+        help="In order to find peaks in the profile, the tool searches for local maxima. Increasing the minimal"
+             "height will decrease the number of peaks (the number of local maxima). It is the minimal amount"
+             "of required reads (events) to be considered. [Default: 5]")
+    parser.add_argument(
+        "--distance",
+        metavar='int',
+        default=10,
+        help="It is the minimal required distance each local maxima have to be apart. Decreasing the parameter"
+             "will result in overfitting (more peaks). [Default: 10]")
     parser.add_argument(
         "--std",
         metavar='int',
@@ -139,15 +146,18 @@ def main():
     peaks_file = open(args.input_bed, "r")
     max_peak_len = 0
     num_peaks = 0
+    data_dict = {}
     for line in peaks_file:
-        num_peaks += 1
         data = line.strip("\n").split("\t")
+        data_dict[num_peaks] = data
         start = data[1]
         end = data[2]
         length = int(end) - int(start)
 
         if (length > max_peak_len):
             max_peak_len = length
+
+        num_peaks += 1
     peaks_file.close()
 
     if ( args.length_norm_value ):
@@ -156,6 +166,15 @@ def main():
     if ( max_peak_len <  10 ):
         sys.exit("[ERROR] Maximal Peak Length has to be at least 10 bases.")
 
+    # Read in chromosome sizes
+    chr_sizes_dict = dict()
+    chr_sizes_file = open(args.chr_file, "r")
+    for line in chr_sizes_file:
+        data = line.strip("\n").split("\t")
+        if (data[0] not in chr_sizes_dict):
+            chr_sizes_dict[data[0]] = int(data[1])
+    chr_sizes_file.close()
+
     print("[NOTE] Maximal peak length {}.".format(max_peak_len))
 
     # Extend the peaks to the maximal length if the parameter is set to true.
@@ -163,15 +182,6 @@ def main():
     if ( args.length_norm ):
 
         print("[NOTE] Activate length normalization.")
-
-        # Read in chromosome sizes
-        chr_sizes_dict = dict()
-        chr_sizes_file = open(args.chr_file, "r")
-        for line in chr_sizes_file:
-            data = line.strip("\n").split("\t")
-            if ( data[0] not in chr_sizes_dict ):
-                chr_sizes_dict[data[0]] = int(data[1])
-        chr_sizes_file.close()
 
         # Define new coorindate for peaks. Extend to maximal length.
         peaks_file = open(args.input_bed, "r")
@@ -300,148 +310,201 @@ def main():
 
     print("[NOTE] Start Deconvolution")
 
-    x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1]))])
-    #y = cov_matrix[9]
-    #y = cov_matrix[15]
-    #y = cov_matrix[21]
-    #y = cov_matrix[18]
-    #y = cov_matrix[47]
-    y = cov_matrix[49]
-
-    profile_fig, ax = plt.subplots()
-    ax.plot(y)
-    ax.set_xlabel('Relative Nucleotide Position')
-    ax.set_ylabel('Intensity')
-    ax.axes.get_xaxis().set_ticks([])
-    profile_fig.savefig('{}/profile.pdf'.format(args.output_folder))
-
-    arg_s = 0.01
-    arg_s = 3500 * arg_s
-
-    #Introduce Regression
-    regression_s = UnivariateSpline(x, y, s=arg_s)
-    ys = regression_s(x)
-    profile_smoothed_fig, ax = plt.subplots()
-    ax.plot(x, ys)
-    ax.set_xlabel('Relative Nucleotide Position')
-    ax.set_ylabel('Intensity')
-    ax.axes.get_xaxis().set_ticks([])
-    profile_smoothed_fig.savefig('{}/profile_smoothed.pdf'.format(args.output_folder))
-
-    # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
-    # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-    num_padding = 40
-    x = numpy.array([int(x+1) for x in range(0, len(cov_matrix[1])+num_padding)])
-    y = numpy.pad(y, (int(num_padding/2), int(num_padding/2)), 'constant', constant_values=(0, 0))
-
-    models_dict_array = [{'type': args.peak_model} for i in range(0,args.max_peaks)]
-
-    spec = {
-        'x': x,
-        'y': y,
-        'model': models_dict_array
-    }
-
-    peaks_indices_array = [i for i in range(0, args.max_peaks)]
-
-    # Peak Detection Plot
-    peaks_found = update_spec_from_peaks(spec, peaks_indices_array, args.output_folder, minimal_height=5, distance=10, std=2)
+    # Read in extended peak file of the coverage calculation for peak meta data.
+    for_data_peaks_file = open(extended_peak_file_name, "r")
+    data_dict = {}
+    counter_peaks = 0
+    for line in for_data_peaks_file:
+        data_dict[counter_peaks] = line.strip("\n").split("\t")
+        counter_peaks += 1
+    for_data_peaks_file.close()
 
     output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
     output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
     output_table_new_peaks = open('{}/final_tab_all_peaks.bed'.format(args.output_folder), "w")
 
-    # Check number of potential local maxima
-    if( len(peaks_found) != 0 ):
+    profile_fig = plt.figure(figsize=(20, 4), dpi=80)
+    fig_extremas = plt.figure(figsize=(20, 4), dpi=80)
+    fig_deconvolution = plt.figure(figsize=(20, 4), dpi=80)
 
-        # Check for distributions to be deleted
-        dist_index = 0
-        while dist_index < len(spec['model']):
-            if 'params' not in spec['model'][dist_index]:
-                del spec['model'][dist_index]
+    profile_fig.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig_extremas.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig_deconvolution.subplots_adjust(hspace=0.3, wspace=0.3)
+
+    plot_counter = 1
+
+    for peak in range( 0, len(cov_matrix) ):
+    #for peak in range(0, 10):
+
+        # data of the peak
+        data = data_dict[peak]
+        chr = data[0]
+        start = int(data[1])
+        end = int(data[2])
+        id = data[3]
+        score = data[4]
+        strand = data[5]
+
+        # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+        pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
+        pre_y = cov_matrix[peak]
+
+        #y = cov_matrix[9]
+        #y = cov_matrix[15]
+        #y = cov_matrix[21]
+        #y = cov_matrix[18]
+        #y = cov_matrix[47]
+        #y = cov_matrix[50]
+
+        # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
+        # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
+        num_padding = 40
+
+        # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+        x = numpy.array([x for x in range(0, len(cov_matrix[1]) + num_padding)])
+        y = numpy.pad(pre_y, (int(num_padding/2), int(num_padding/2)), 'constant', constant_values=(0, 0))
+        inv_y = y * -1
+
+        models_dict_array = [{'type': args.peak_model} for i in range(0,args.max_peaks)]
+
+        spec = {
+            'x': x,
+            'y': y,
+            'model': models_dict_array
+        }
+
+        peaks_indices_array = [i for i in range(0, args.max_peaks)]
+
+        # Peak Detection Plot
+        list_of_update_spec_from_peaks = update_spec_from_peaks(spec, peaks_indices_array, minimal_height=args.min_height,
+                                                                distance=args.distance, std=2)
+        peaks_found = list_of_update_spec_from_peaks[0]
+        found_local_minima = list_of_update_spec_from_peaks[1]
+
+        new_start = start - int(num_padding/2)
+        new_end = end + int(num_padding/2)
+        real_coordinates_list = numpy.array([x for x in range(new_start, new_end)])
+
+        # Check number of potential local maxima
+        if( len(peaks_found) != 0 ):
+
+            # Check for distributions to be deleted
+            dist_index = 0
+            while dist_index < len(spec['model']):
+                if 'params' not in spec['model'][dist_index]:
+                    del spec['model'][dist_index]
+                else:
+                    dist_index += 1
+
+            # Fitting Plot
+            model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
+
+            output = model.fit(spec['y'], params, x=spec['x'])
+            #output.plot(data_kws={'markersize': 1})
+            #plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
+
+            # Get new peaks
+            peaks_in_profile = get_best_values(spec, output)
+            num_deconvoluted_peaks = len(peaks_in_profile[0])
+            components = output.eval_components(x=spec['x'])
+
+            peak_start_list = [start] * num_deconvoluted_peaks
+            peak_end_list = [end] * num_deconvoluted_peaks
+            peak_center_list = [-1] * num_deconvoluted_peaks
+
+            rectangle_start_list = [-1] * num_deconvoluted_peaks
+            rectangle_end_list = [-1] * num_deconvoluted_peaks
+
+            if (num_deconvoluted_peaks > 1):
+                for i in range(0, num_deconvoluted_peaks):
+                    peak_center = int(peaks_in_profile[0][i])
+                    peak_center_list[i] = real_coordinates_list[peak_center]
+                    peak_sigma = peaks_in_profile[1][i]
+
+                    # Change Coordinates
+                    left_right_extension = numpy.floor((peak_sigma * args.std))
+
+                    peak_start_list[i] = real_coordinates_list[peak_center] - left_right_extension
+                    peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1 # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+
+                    rectangle_start_list[i] = peak_center - left_right_extension
+                    rectangle_end_list[i] = peak_center + left_right_extension
+
+                    if ( peak_start_list[i] < 0 ):
+                        peak_start_list[i] = 0
+
+                    if ( peak_end_list[i] > chr_sizes_dict[chr] ):
+                       peak_end_list[i] = chr_sizes_dict[chr]
+
+                    # Write Output tables
+                    # Check number of potential found peaks
+                    output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, peak_center_list[i], id + "_" + str(i),
+                                                                                        score, strand))
+                    output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, peak_start_list[i], peak_end_list[i],
+                                                                                         id + "_" + str(i), score, strand))
+                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
             else:
-                dist_index += 1
+                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
+                summit = real_coordinates_list[numpy.argmax(pre_y)]
+                output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
 
-        # Fitting Plot
-        model, params = generate_model(spec, min_peak_width=5, max_peak_width=10)
+            # Plot Area
+            if (len(peaks_found) > 1 and plot_counter <= 10):
+                ax = profile_fig.add_subplot(2, 5, plot_counter)
+                ax.plot(pre_x, pre_y)
+                ax.set_xlabel('Relative Nucleotide Position')
+                ax.set_ylabel('Intensity')
+                ax.axes.get_xaxis().set_ticks([])
 
-        output = model.fit(spec['y'], params, x=spec['x'])
-        output.plot(data_kws={'markersize': 1})
-        plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
+                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
+                ax2.plot(x, y)
+                ax2.plot(x, inv_y)
+                ax2.plot(peaks_found, y[peaks_found], "o")
+                ax2.plot(found_local_minima, inv_y[found_local_minima], "x")
+                ax2.set_xlabel('Relative Nucleotide Position')
+                ax2.set_ylabel('Intensity')
 
-        # Get new peaks
-        peaks_in_profile = get_best_values(spec, output)
-        num_deconvoluted_peaks = len(peaks_in_profile[0])
-        components = output.eval_components(x=spec['x'])
+                # Deconvolution Plot
+                # get maximum value of components
+                max_fitted_y = 0
+                for i, model in enumerate(spec['model']):
+                    if (max_fitted_y < numpy.max(components[f'm{i}_'])):
+                        max_fitted_y = numpy.max(components[f'm{i}_'])
 
-        # Change Coordinates
-        peak_start_list = [-1] * num_deconvoluted_peaks
-        peak_end_list = [-1] * num_deconvoluted_peaks
-        if (num_deconvoluted_peaks > 1):
-            for i in range(0, num_deconvoluted_peaks):
-                left_right_extension = numpy.floor((peaks_in_profile[1][i] * args.std))
-                peak_start_list[i] = peaks_in_profile[0][i] - left_right_extension
-                peak_end_list[i] = peaks_in_profile[0][i] + left_right_extension
+                max_y_plot = max_fitted_y
+                if (max_fitted_y < max(y)):
+                    max_y_plot = max(y)
 
-                if ( peak_start_list[i] < 0 ):
-                    peak_start_list[i] = 0
+                c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
+                ax3 = fig_deconvolution.add_subplot(2, 5, plot_counter)
+                # Add rectangles
+                for i, model in enumerate(spec['model']):
+                    ax3.plot(spec['x'], components[f'm{i}_'], color=c[i])
+                    rect = patches.Rectangle((rectangle_start_list[i], 0),
+                                             width=rectangle_end_list[i] - rectangle_start_list[i],
+                                             height=max_y_plot, facecolor=c[i], alpha=0.3)
+                    ax3.add_patch(rect)
+                ax3.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
+                ax3.set_xlabel('Relative Nucleotide Position')
+                ax3.set_ylabel('Intensity')
+                ax3.set_ylim([0, max_y_plot])
+                ax3.axes.get_xaxis().set_ticks([])
 
-                # TODO
-                # if ( end > chr_sizes_dict["chr"] ):
-                #    end = chr_sizes_dict["chr"]
-
-
-        # Write Output tables
-        # Check number of potential found peaks
-        if ( num_deconvoluted_peaks > 1 ):
-            output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", len(peaks_in_profile), peaks_in_profile))
-            for i in range(0, num_deconvoluted_peaks):
-                output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", peaks_in_profile[0][i],
-                                                                                    peaks_in_profile[0][i], "peakid_" + str(i),
-                                                                                    "0.0", "strand"))
-
-                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", peak_start_list[i], peak_end_list[i],
-                                                                                     "peakid_" + str(i), "-1", "strand"))
+                plot_counter += 1
         else:
-            output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
-            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
-                                                                           "end", "peakid",
-                                                                           "0.0", "strand"))
+            output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
+            summit = real_coordinates_list[numpy.argmax(pre_y)]
+            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
 
-        # Deconvolution Plot
-        # get maximum value of components
-        max_fitted_y = 0
-        for i, model in enumerate(spec['model']):
-            if ( max_fitted_y < numpy.max(components[f'm{i}_']) ):
-                max_fitted_y = numpy.max(components[f'm{i}_'])
+    profile_fig.savefig('{}/profile.pdf'.format(args.output_folder), bbox_inches='tight')
+    fig_extremas.savefig('{}/profile_peaks.pdf'.format(args.output_folder), bbox_inches='tight')
+    fig_deconvolution.savefig('{}/profile_deconvolution.pdf'.format(args.output_folder), bbox_inches='tight')
 
-        max_y_plot = max_fitted_y
-        if ( max_fitted_y < max(y) ):
-            max_y_plot = max(y)
-
-        c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
-        fig, ax = plt.subplots()
-        for i, model in enumerate(spec['model']):
-            ax.plot(spec['x'], components[f'm{i}_'], color=c[i])
-            rect = patches.Rectangle( (peak_start_list[i], 0),
-                                      width=peak_end_list[i]-peak_start_list[i],
-                                      height=max_y_plot, facecolor=c[i], alpha=0.3)
-            ax.add_patch(rect)
-        ax.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
-        ax.set_xlabel('Relative Nucleotide Position')
-        ax.set_ylabel('Intensity')
-        ax.set_ylim([0, max_y_plot])
-        ax.axes.get_xaxis().set_ticks([])
-        fig.savefig('{}/profile_deconvolution.pdf'.format(args.output_folder))
-
-    else:
-        output_table_overview.write("{0}\t{1}\t{2}\n".format("peakid", "1", "just this one"))
-        output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format("chr", "start",
-                                                                       "end", "peakid",
-                                                                       "0.0", "strand"))
     output_table_overview.close()
     output_table_summits.close()
     output_table_new_peaks.close()
+
+    print("[FINISH]")
 
 if __name__ == '__main__':
     main()

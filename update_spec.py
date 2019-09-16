@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from scipy import signal
 
-def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, distance, std, **kwargs):
+def update_spec_from_peaks(spec, model_indicies, minimal_height, distance, std, **kwargs):
     x = spec['x']
     y = spec['y']
 
@@ -34,8 +34,6 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
 
     peak_indicies = numpy.array(found_local_maximas[0])
     peak_indicies.sort()
-
-    print(peak_indicies)
 
     std_dict = {}
     width_dict = {}
@@ -74,8 +72,6 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
         width_dict[peak_indicies[i]] = dist_width
         std_dict[peak_indicies[i]] = (dist_width / len(x) * 100.0) / std
 
-    print(width_dict)
-
     # Check if two maximas share the same width.
     # This happens if one local maxima is actually a false positive.
     true_positives = []
@@ -94,20 +90,6 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
 
     peak_indicies = numpy.array(true_positives)
 
-    print("Summits")
-    print(peak_indicies)
-
-    if ( len(peak_indicies) != 0):
-        fig_extremas, ax = plt.subplots()
-        ax.plot(y)
-        ax.plot(inv_y)
-        ax.plot(peak_indicies, y[peak_indicies], "o")
-        ax.plot(found_local_minima, inv_y[found_local_minima], "x")
-        ax.set_xlabel('Relative Nucleotide Position')
-        ax.set_ylabel('Intensity')
-        #ax.axes.get_xaxis().set_ticks([])
-        fig_extremas.savefig('{}/profile_peaks.pdf'.format(output_folder))
-
     numpy.random.shuffle(peak_indicies)
     for peak_indicie, model_indicie in zip(peak_indicies.tolist(), model_indicies):
         model = spec['model'][model_indicie]
@@ -125,4 +107,4 @@ def update_spec_from_peaks(spec, model_indicies, output_folder, minimal_height, 
                 model['params'] = params
         else:
             raise NotImplemented("Function type not implemented")
-    return peak_indicies
+    return [peak_indicies,found_local_minima]
