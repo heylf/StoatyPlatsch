@@ -6,7 +6,7 @@ from dist_check import dist_check_main
 
 from scipy import signal
 
-def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, distance, std, **kwargs):
+def update_spec_from_peaks(spec, minimal_height, distance, **kwargs):
     x = spec['x']
     y = spec['y']
 
@@ -38,8 +38,6 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
     peak_indicies = numpy.array(found_local_maximas[0])
     peak_indicies.sort()
 
-    std_dict = {}
-    width_dict = {}
     left_local_minimum_dict = {}
     right_local_minimum_dict = {}
 
@@ -64,16 +62,6 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
 
         left_local_minimum_dict[peak_indicies[i]] = left_local_minimun
         right_local_minimum_dict[peak_indicies[i]] = right_local_minimum
-        dist_width = right_local_minimum - left_local_minimun
-
-        # Dist / len(x) * 100 = relative length of peak.
-        # Relative Length / 4 = Variance.
-        # Because Z = (X-mu)/sigma, and I want to have a range of 2*sigma = X-mu, I have Z = 2.
-        # Because I make a relation to the standard normal distribution N(0,1) I have finally 2=X or -2=X.
-        # So to standardize my peak width in accordance to a standard normal distritbuion I have to divide
-        # by a range of 4 (from -2 to 2).
-        width_dict[peak_indicies[i]] = dist_width
-        std_dict[peak_indicies[i]] = (dist_width / len(x) * 100.0) / std
 
     # Check if two maximas share the same width.
     # This happens if one local maxima is actually a false positive.
@@ -92,22 +80,58 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
         true_positives = peak_indicies
 
     peak_indicies = numpy.array(true_positives)
+    peak_indicies.sort()
 
-    numpy.random.shuffle(peak_indicies)
-    for peak_indicie, model_indicie in zip(peak_indicies.tolist(), model_indicies):
-        model = spec['model'][model_indicie]
-        if model['type'] in ['GaussianModel', 'LorentzianModel', 'VoigtModel']:
-            params = {
-                'height': y[peak_indicie],
-                #'sigma': x_range / len(x) * numpy.min(peak_widths),
-                'sigma': std_dict[peak_indicie], #numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
-                'center': x[peak_indicie],
-                'width': width_dict[peak_indicie]
-            }
-            if 'params' in model:
-                model.update(params)
-            else:
-                model['params'] = params
-        else:
-            raise NotImplemented("Function type not implemented")
-    return [peak_indicies,found_local_minima]
+    print(peak_indicies)
+
+    fitted_profiles_dict = dict()
+
+    std = [-1] * len(peak_indicies)
+    for i in range(0, len(peak_indicies)):
+
+        s = left_local_minimum_dict[peak_indicies[i]]
+        e = right_local_minimum_dict[peak_indicies[i]]+1
+
+        subpeak_y = y[s:e]
+        subpeak_x = [x for x in range(len(subpeak_y))]
+
+        best_subpeak_dist_type = dist_check_main(subpeak_y,1)
+
+        print(best_subpeak_dist_type)
+
+        subpeak_params = eval("scipy.stats." + best_subpeak_dist_type + ".fit(subpeak_y)")
+        subpeak_f = eval("scipy.stats." + best_subpeak_dist_type + ".freeze" + str(subpeak_params))
+        subpeak_fitted_quantiles = numpy.linspace(subpeak_f.ppf(0.00001), subpeak_f.ppf(0.99999), len(subpeak_x))
+        fitted_y = subpeak_f.pdf(subpeak_fitted_quantiles)
+
+        # There are no negative read counts
+        for j in range(0, len(fitted_y)):
+            if ( fitted_y[j] < 0.0 ):
+                fitted_y[j] = 0.0
+
+        # max min normalize fitted_profile so fitted profile fits better the real data
+        max_of_fitted = numpy.max(fitted_y)
+        min_of_fitted = numpy.min(fitted_y)
+        for j in range(0, len(fitted_y)):
+            a = ( fitted_y[j] - min_of_fitted )
+            b = ( max_of_fitted - min_of_fitted)
+            fitted_y[j] =  ( a / b ) * numpy.max(subpeak_y)
+
+        # shift profile based on the correct summit
+        summit_index_y = numpy.argmax(subpeak_y)
+        summit_index_fitted_y = numpy.argmax(fitted_y)
+        shift = summit_index_y - summit_index_fitted_y
+        s += shift
+        e += shift
+
+        full_fitted_y = numpy.zeros(len(y))
+        full_fitted_y[s:e] = fitted_y
+
+        fitted_profiles_dict[peak_indicies[i]] = full_fitted_y
+
+        # scale = variance
+        std[i] = numpy.sqrt(subpeak_params[1])
+
+        print(std[i])
+
+    return [peak_indicies, found_local_minima, std, fitted_profiles_dict]

@@ -8,7 +8,7 @@ import os
 import numpy
 import sys
 
-from update_spec import update_spec_from_peaks
+from update_spec_with_scipy import update_spec_from_peaks
 from generate_model import generate_model
 from rainbow_colors import color_linear_gradient
 from get_best_values import get_best_values
@@ -346,8 +346,8 @@ def main():
         strand = data[5]
 
         # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
-        pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
-        pre_y = cov_matrix[peak]
+        x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
+        y = cov_matrix[peak]
 
         #y = cov_matrix[9]
         #y = cov_matrix[15]
@@ -356,145 +356,104 @@ def main():
         #y = cov_matrix[47]
         #y = cov_matrix[50]
 
-        # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
-        # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-        num_padding = 40
-
         # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
-        x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
-        y = numpy.pad(pre_y, (int(num_padding/2), int(num_padding/2)), 'constant', constant_values=(0, 0))
         inv_y = y * -1
 
-        models_dict_array = [{'type': args.peak_model} for i in range(0,args.max_peaks)]
-
-        spec = {
-            'x': x,
-            'y': y,
-            'model': models_dict_array
-        }
+        spec = { 'x': x, 'y': y }
 
         peaks_indices_array = [i for i in range(0, args.max_peaks)]
 
         # Peak Detection Plot
-        list_of_update_spec_from_peaks = update_spec_from_peaks(args.output_folder, spec, peaks_indices_array, minimal_height=args.min_height,
-                                                                distance=args.distance, std=2)
+        list_of_update_spec_from_peaks = update_spec_from_peaks(spec, minimal_height=args.min_height, distance=args.distance)
+
         peaks_found = list_of_update_spec_from_peaks[0]
         found_local_minima = list_of_update_spec_from_peaks[1]
+        std = list_of_update_spec_from_peaks[2]
+        fitted_profiles = list_of_update_spec_from_peaks[3]
 
-        new_start = start - int(num_padding/2)
-        new_end = end + int(num_padding/2)
-        real_coordinates_list = numpy.array([x for x in range(new_start, new_end)])
+        real_coordinates_list = numpy.array([x for x in range(start, end)])
+
+        num_deconvoluted_peaks = len(peaks_found)
+        c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
+
+        # test_fitted_fig = plt.figure(figsize=(4, 4), dpi=80)
+        # ax2 = test_fitted_fig.add_subplot(1, 1, 1)
+        # ax2.plot(x, y)
+        # color_counter = 0
+        # for peak in peaks_found:
+        #     boobs = fitted_profiles[peak] * 10
+        #     ax2.plot(x, boobs, color=c[color_counter])
+        #     color_counter += 1
+        # ax2.set_xlabel('Relative Nucleotide Position')
+        # ax2.set_ylabel('Intensity')
+        # ax2.axes.get_xaxis().set_ticks([])
+        # test_fitted_fig.savefig('{}/test_fitted_subprofile.pdf'.format(args.output_folder), bbox_inches='tight')
+
+        peak_start_list = [start] * num_deconvoluted_peaks
+        peak_end_list = [end] * num_deconvoluted_peaks
+        peak_center_list = [-1] * num_deconvoluted_peaks
+
+        rectangle_start_list = [-1] * num_deconvoluted_peaks
+        rectangle_end_list = [-1] * num_deconvoluted_peaks
 
         # Check number of potential local maxima
-        if( len(peaks_found) != 0 ):
+        if (len(peaks_found) != 0):
 
-            # Check for distributions to be deleted
-            dist_index = 0
-            while dist_index < len(spec['model']):
-                if 'params' not in spec['model'][dist_index]:
-                    del spec['model'][dist_index]
-                else:
-                    dist_index += 1
-
-            # Fitting Plot
-            model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
-
-            output = model.fit(spec['y'], params, x=spec['x'])
-            #output.plot(data_kws={'markersize': 1})
-            #plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
-
-            # Get new peaks
-            peaks_in_profile = get_best_values(spec, output)
-            num_deconvoluted_peaks = len(peaks_in_profile[0])
-            components = output.eval_components(x=spec['x'])
-
-            peak_start_list = [start] * num_deconvoluted_peaks
-            peak_end_list = [end] * num_deconvoluted_peaks
-            peak_center_list = [-1] * num_deconvoluted_peaks
-
-            rectangle_start_list = [-1] * num_deconvoluted_peaks
-            rectangle_end_list = [-1] * num_deconvoluted_peaks
-
+            # Get Met for changing Coordinates
             if (num_deconvoluted_peaks > 1):
-                for i in range(0, num_deconvoluted_peaks):
-                    peak_center = int(peaks_in_profile[0][i])
-                    peak_center_list[i] = real_coordinates_list[peak_center]
-                    peak_sigma = peaks_in_profile[1][i]
+                for p in range(0, num_deconvoluted_peaks):
+                    peak_center = peaks_found[p]
+                    peak_center_list[p] = real_coordinates_list[peak_center]
+                    peak_sigma = std[p]
 
                     # Change Coordinates
                     left_right_extension = numpy.floor((peak_sigma * args.std))
 
-                    peak_start_list[i] = real_coordinates_list[peak_center] - left_right_extension
-                    peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1 # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+                    peak_start_list[p] = real_coordinates_list[peak_center] - left_right_extension
+                    peak_end_list[p] = real_coordinates_list[peak_center] + left_right_extension + 1 # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
 
-                    rectangle_start_list[i] = peak_center - left_right_extension
-                    rectangle_end_list[i] = peak_center + left_right_extension
+                    rectangle_start_list[p] = peak_center - left_right_extension
+                    rectangle_end_list[p] = peak_center + left_right_extension
 
-                    if ( peak_start_list[i] < 0 ):
-                        peak_start_list[i] = 0
+                    if ( peak_start_list[p] < 0 ):
+                        peak_start_list[p] = 0
 
-                    if ( peak_end_list[i] > chr_sizes_dict[chr] ):
-                       peak_end_list[i] = chr_sizes_dict[chr]
+                    if ( peak_end_list[p] > chr_sizes_dict[chr] ):
+                       peak_end_list[p] = chr_sizes_dict[chr]
 
-                    # Write Output tables
-                    # Check number of potential found peaks
-                    output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, peak_center_list[i], id + "_" + str(i),
-                                                                                        score, strand))
-                    output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, peak_start_list[i], peak_end_list[i],
-                                                                                         id + "_" + str(i), score, strand))
-                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
-            else:
-                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
-                summit = real_coordinates_list[numpy.argmax(pre_y)]
-                output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
+            # Deconvolution Plot
+            # get maximum value of components
+            max_fitted_y = 0
+            for peak in peaks_found:
+               if (max_fitted_y < numpy.max(fitted_profiles[peak])):
+                   max_fitted_y = numpy.max(fitted_profiles[peak])
 
-            # Plot Area
-            if (len(peaks_found) > 1 and plot_counter <= 10):
-                ax = profile_fig.add_subplot(2, 5, plot_counter)
-                ax.plot(pre_x, pre_y)
-                ax.set_xlabel('Relative Nucleotide Position')
-                ax.set_ylabel('Intensity')
-                ax.axes.get_xaxis().set_ticks([])
+            max_y_plot = max_fitted_y
+            if (max_fitted_y < max(y)):
+                max_y_plot = max(y)
 
-                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
-                ax2.plot(x, y)
-                ax2.plot(x, inv_y)
-                ax2.plot(peaks_found, y[peaks_found], "o")
-                ax2.plot(found_local_minima, inv_y[found_local_minima], "x")
-                ax2.set_xlabel('Relative Nucleotide Position')
-                ax2.set_ylabel('Intensity')
+            ax2 = fig_extremas.add_subplot(1, 1, plot_counter)
+            ax2.plot(x, y)
+            ax2.plot(x, inv_y)
+            ax2.plot(peaks_found, y[peaks_found], "o")
+            ax2.plot(found_local_minima, inv_y[found_local_minima], "x")
+            ax2.set_xlabel('Relative Nucleotide Position')
+            ax2.set_ylabel('Intensity')
 
-                # Deconvolution Plot
-                # get maximum value of components
-                max_fitted_y = 0
-                for i, model in enumerate(spec['model']):
-                    if (max_fitted_y < numpy.max(components[f'm{i}_'])):
-                        max_fitted_y = numpy.max(components[f'm{i}_'])
-
-                max_y_plot = max_fitted_y
-                if (max_fitted_y < max(y)):
-                    max_y_plot = max(y)
-
-                c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
-                ax3 = fig_deconvolution.add_subplot(2, 5, plot_counter)
-                # Add rectangles
-                for i, model in enumerate(spec['model']):
-                    ax3.plot(spec['x'], components[f'm{i}_'], color=c[i])
-                    rect = patches.Rectangle((rectangle_start_list[i], 0),
-                                             width=rectangle_end_list[i] - rectangle_start_list[i],
-                                             height=max_y_plot, facecolor=c[i], alpha=0.3)
-                    ax3.add_patch(rect)
-                ax3.bar(spec['x'], spec['y'], width=1.0, color="black", edgecolor="black")
-                ax3.set_xlabel('Relative Nucleotide Position')
-                ax3.set_ylabel('Intensity')
-                ax3.set_ylim([0, max_y_plot])
-                ax3.axes.get_xaxis().set_ticks([])
-
-                plot_counter += 1
-        else:
-            output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
-            summit = real_coordinates_list[numpy.argmax(pre_y)]
-            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
+            ax3 = fig_deconvolution.add_subplot(1, 1, plot_counter)
+            # Add rectangles
+            for p in range(0, num_deconvoluted_peaks):
+                peak = peaks_found[p]
+                ax3.plot(x, fitted_profiles[peak], color=c[p])
+                rect = patches.Rectangle((rectangle_start_list[p], 0),
+                                         width=rectangle_end_list[p] - rectangle_start_list[p],
+                                         height=max_y_plot, facecolor=c[p], alpha=0.3)
+                ax3.add_patch(rect)
+            ax3.bar(x, y, width=1.0, color="black", edgecolor="black")
+            ax3.set_xlabel('Relative Nucleotide Position')
+            ax3.set_ylabel('Intensity')
+            ax3.set_ylim([0, max_y_plot])
+            ax3.axes.get_xaxis().set_ticks([])
 
     profile_fig.savefig('{}/profile.pdf'.format(args.output_folder), bbox_inches='tight')
     fig_extremas.savefig('{}/profile_peaks.pdf'.format(args.output_folder), bbox_inches='tight')
