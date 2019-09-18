@@ -14,6 +14,7 @@ import scipy.stats
 import warnings
 import random
 import math
+import numpy
 
 # just for surpressing warnings
 warnings.simplefilter('ignore')
@@ -24,88 +25,88 @@ from joblib import Parallel, delayed
 
 # list of all available distributions
 cdfs = {
-    "alpha": {"p":[], "D": []},           #Alpha
-    "anglit": {"p":[], "D": []},          #Anglit
-    "arcsine": {"p":[], "D": []},         #Arcsine
-    "beta": {"p":[], "D": []},            #Beta
-    "betaprime": {"p":[], "D": []},       #Beta Prime
-    "bradford": {"p":[], "D": []},        #Bradford
-    "burr": {"p":[], "D": []},            #Burr
-    "cauchy": {"p":[], "D": []},          #Cauchy
-    "chi": {"p":[], "D": []},             #Chi
-    "chi2": {"p":[], "D": []},            #Chi-squared
-    "cosine": {"p":[], "D": []},          #Cosine
-    "dgamma": {"p":[], "D": []},          #Double Gamma
-    "dweibull": {"p":[], "D": []},        #Double Weibull
-    "erlang": {"p":[], "D": []},          #Erlang
-    "expon": {"p":[], "D": []},           #Exponential
-    "exponweib": {"p":[], "D": []},       #Exponentiated Weibull
-    "exponpow": {"p":[], "D": []},        #Exponential Power
-    "f": {"p":[], "D": []},               #F (Snecdor F)
-    "fatiguelife": {"p":[], "D": []},     #Fatigue Life (Birnbaum-Sanders)
-    "fisk": {"p":[], "D": []},            #Fisk
-    "foldcauchy": {"p":[], "D": []},      #Folded Cauchy
-    "foldnorm": {"p":[], "D": []},        #Folded Normal
-    "frechet_r": {"p":[], "D": []},       #Frechet Right Sided, Extreme Value Type II
-    "frechet_l": {"p":[], "D": []},       #Frechet Left Sided, Weibull_max
-    "gamma": {"p":[], "D": []},           #Gamma
-    "gausshyper": {"p":[], "D": []},      #Gauss Hypergeometric
-    "genexpon": {"p":[], "D": []},        #Generalized Exponential
-    "genextreme": {"p":[], "D": []},      #Generalized Extreme Value
-    "gengamma": {"p":[], "D": []},        #Generalized gamma
-    "genhalflogistic": {"p":[], "D": []}, #Generalized Half Logistic
-    "genlogistic": {"p":[], "D": []},     #Generalized Logistic
-    "genpareto": {"p":[], "D": []},       #Generalized Pareto
-    "gilbrat": {"p":[], "D": []},         #Gilbrat
-    "gompertz": {"p":[], "D": []},        #Gompertz (Truncated Gumbel)
-    "gumbel_l": {"p":[], "D": []},        #Left Sided Gumbel, etc.
-    "gumbel_r": {"p":[], "D": []},        #Right Sided Gumbel
-    "halfcauchy": {"p":[], "D": []},      #Half Cauchy
-    "halflogistic": {"p":[], "D": []},    #Half Logistic
-    "halfnorm": {"p":[], "D": []},        #Half Normal
-    "hypsecant": {"p":[], "D": []},       #Hyperbolic Secant
-    "invgamma": {"p":[], "D": []},        #Inverse Gamma
-    "invgauss": {"p":[], "D": []},        #Inverse Normal
-    "invweibull": {"p":[], "D": []},      #Inverse Weibull
-    "johnsonsb": {"p":[], "D": []},       #Johnson SB
-    "johnsonsu": {"p":[], "D": []},       #Johnson SU
-    "laplace": {"p":[], "D": []},         #Laplace
-    "logistic": {"p":[], "D": []},        #Logistic
-    "loggamma": {"p":[], "D": []},        #Log-Gamma
-    "loglaplace": {"p":[], "D": []},      #Log-Laplace (Log Double Exponential)
-    "lognorm": {"p":[], "D": []},         #Log-Normal
-    "lomax": {"p":[], "D": []},           #Lomax (Pareto of the second kind)
-    "maxwell": {"p":[], "D": []},         #Maxwell
-    "mielke": {"p":[], "D": []},          #Mielke's Beta-Kappa
-    "nakagami": {"p":[], "D": []},        #Nakagami
-    "ncx2": {"p":[], "D": []},            #Non-central chi-squared
-    "ncf": {"p":[], "D": []},             #Non-central F
-    "nct": {"p":[], "D": []},             #Non-central Student's T
-    "norm": {"p":[], "D": []},            #Normal (Gaussian)
-    "pareto": {"p":[], "D": []},          #Pareto
-    "pearson3": {"p":[], "D": []},        #Pearson type III
-    "powerlaw": {"p":[], "D": []},        #Power-function
-    "powerlognorm": {"p":[], "D": []},    #Power log normal
-    "powernorm": {"p":[], "D": []},       #Power normal
-    "rdist": {"p":[], "D": []},           #R distribution
-    "reciprocal": {"p":[], "D": []},      #Reciprocal
-    "rayleigh": {"p":[], "D": []},        #Rayleigh
-    "rice": {"p":[], "D": []},            #Rice
-    "recipinvgauss": {"p":[], "D": []},   #Reciprocal Inverse Gaussian
-    "semicircular": {"p":[], "D": []},    #Semicircular
-    "t": {"p":[], "D": []},               #Student's T
-    "triang": {"p":[], "D": []},          #Triangular
-    "truncexpon": {"p":[], "D": []},      #Truncated Exponential
-    "truncnorm": {"p":[], "D": []},       #Truncated Normal
-    "tukeylambda": {"p":[], "D": []},     #Tukey-Lambda
-    "uniform": {"p":[], "D": []},         #Uniform
-    "vonmises": {"p":[], "D": []},        #Von-Mises (Circular)
-    "wald": {"p":[], "D": []},            #Wald
-    "weibull_min": {"p":[], "D": []},     #Minimum Weibull (see Frechet)
-    "weibull_max": {"p":[], "D": []},     #Maximum Weibull (see Frechet)
-    "wrapcauchy": {"p":[], "D": []},      #Wrapped Cauchy
-    "ksone": {"p":[], "D": []},           #Kolmogorov-Smirnov one-sided (no stats)
-    "kstwobign": {"p":[], "D": []}}       #Kolmogorov-Smirnov two-sided test for Large N
+    "alpha": {"p":[], "D": [], "KL": []},           #Alpha
+    "anglit": {"p":[], "D": [], "KL": []},          #Anglit
+    "arcsine": {"p":[], "D": [], "KL": []},         #Arcsine
+    "beta": {"p":[], "D": [], "KL": []},            #Beta
+    "betaprime": {"p":[], "D": [], "KL": []},       #Beta Prime
+    "bradford": {"p":[], "D": [], "KL": []},        #Bradford
+    "burr": {"p":[], "D": [], "KL": []},            #Burr
+    "cauchy": {"p":[], "D": [], "KL": []},          #Cauchy
+    "chi": {"p":[], "D": [], "KL": []},             #Chi
+    "chi2": {"p":[], "D": [], "KL": []},            #Chi-squared
+    "cosine": {"p":[], "D": [], "KL": []},          #Cosine
+    "dgamma": {"p":[], "D": [], "KL": []},          #Double Gamma
+    "dweibull": {"p":[], "D": [], "KL": []},        #Double Weibull
+    "erlang": {"p":[], "D": [], "KL": []},          #Erlang
+    "expon": {"p":[], "D": [], "KL": []},           #Exponential
+    "exponweib": {"p":[], "D": [], "KL": []},       #Exponentiated Weibull
+    "exponpow": {"p":[], "D": [], "KL": []},        #Exponential Power
+    "f": {"p":[], "D": [], "KL": []},               #F (Snecdor F)
+    "fatiguelife": {"p":[], "D": [], "KL": []},     #Fatigue Life (Birnbaum-Sanders)
+    "fisk": {"p":[], "D": [], "KL": []},            #Fisk
+    "foldcauchy": {"p":[], "D": [], "KL": []},      #Folded Cauchy
+    "foldnorm": {"p":[], "D": [], "KL": []},        #Folded Normal
+    "frechet_r": {"p":[], "D": [], "KL": []},       #Frechet Right Sided, Extreme Value Type II
+    "frechet_l": {"p":[], "D": [], "KL": []},       #Frechet Left Sided, Weibull_max
+    "gamma": {"p":[], "D": [], "KL": []},           #Gamma
+    "gausshyper": {"p":[], "D": [], "KL": []},      #Gauss Hypergeometric
+    "genexpon": {"p":[], "D": [], "KL": []},        #Generalized Exponential
+    "genextreme": {"p":[], "D": [], "KL": []},      #Generalized Extreme Value
+    "gengamma": {"p":[], "D": [], "KL": []},        #Generalized gamma
+    "genhalflogistic": {"p":[], "D": [], "KL": []}, #Generalized Half Logistic
+    "genlogistic": {"p":[], "D": [], "KL": []},     #Generalized Logistic
+    "genpareto": {"p":[], "D": [], "KL": []},       #Generalized Pareto
+    "gilbrat": {"p":[], "D": [], "KL": []},         #Gilbrat
+    "gompertz": {"p":[], "D": [], "KL": []},        #Gompertz (Truncated Gumbel)
+    "gumbel_l": {"p":[], "D": [], "KL": []},        #Left Sided Gumbel, etc.
+    "gumbel_r": {"p":[], "D": [], "KL": []},        #Right Sided Gumbel
+    "halfcauchy": {"p":[], "D": [], "KL": []},      #Half Cauchy
+    "halflogistic": {"p":[], "D": [], "KL": []},    #Half Logistic
+    "halfnorm": {"p":[], "D": [], "KL": []},        #Half Normal
+    "hypsecant": {"p":[], "D": [], "KL": []},       #Hyperbolic Secant
+    "invgamma": {"p":[], "D": [], "KL": []},        #Inverse Gamma
+    "invgauss": {"p":[], "D": [], "KL": []},        #Inverse Normal
+    "invweibull": {"p":[], "D": [], "KL": []},      #Inverse Weibull
+    "johnsonsb": {"p":[], "D": [], "KL": []},       #Johnson SB
+    "johnsonsu": {"p":[], "D": [], "KL": []},       #Johnson SU
+    "laplace": {"p":[], "D": [], "KL": []},         #Laplace
+    "logistic": {"p":[], "D": [], "KL": []},        #Logistic
+    "loggamma": {"p":[], "D": [], "KL": []},        #Log-Gamma
+    "loglaplace": {"p":[], "D": [], "KL": []},      #Log-Laplace (Log Double Exponential)
+    "lognorm": {"p":[], "D": [], "KL": []},         #Log-Normal
+    "lomax": {"p":[], "D": [], "KL": []},           #Lomax (Pareto of the second kind)
+    "maxwell": {"p":[], "D": [], "KL": []},         #Maxwell
+    "mielke": {"p":[], "D": [], "KL": []},          #Mielke's Beta-Kappa
+    "nakagami": {"p":[], "D": [], "KL": []},        #Nakagami
+    "ncx2": {"p":[], "D": [], "KL": []},            #Non-central chi-squared
+    "ncf": {"p":[], "D": [], "KL": []},             #Non-central F
+    "nct": {"p":[], "D": [], "KL": []},             #Non-central Student's T
+    "norm": {"p":[], "D": [], "KL": []},            #Normal (Gaussian)
+    "pareto": {"p":[], "D": [], "KL": []},          #Pareto
+    "pearson3": {"p":[], "D": [], "KL": []},        #Pearson type III
+    "powerlaw": {"p":[], "D": [], "KL": []},        #Power-function
+    "powerlognorm": {"p":[], "D": [], "KL": []},    #Power log normal
+    "powernorm": {"p":[], "D": [], "KL": []},       #Power normal
+    "rdist": {"p":[], "D": [], "KL": []},           #R distribution
+    "reciprocal": {"p":[], "D": [], "KL": []},      #Reciprocal
+    "rayleigh": {"p":[], "D": [], "KL": []},        #Rayleigh
+    "rice": {"p":[], "D": [], "KL": []},            #Rice
+    "recipinvgauss": {"p":[], "D": [], "KL": []},   #Reciprocal Inverse Gaussian
+    "semicircular": {"p":[], "D": [], "KL": []},    #Semicircular
+    "t": {"p":[], "D": [], "KL": []},               #Student's T
+    "triang": {"p":[], "D": [], "KL": []},          #Triangular
+    "truncexpon": {"p":[], "D": [], "KL": []},      #Truncated Exponential
+    "truncnorm": {"p":[], "D": [], "KL": []},       #Truncated Normal
+    "tukeylambda": {"p":[], "D": [], "KL": []},     #Tukey-Lambda
+    "uniform": {"p":[], "D": [], "KL": []},         #Uniform
+    "vonmises": {"p":[], "D": [], "KL": []},        #Von-Mises (Circular)
+    "wald": {"p":[], "D": [], "KL": []},            #Wald
+    "weibull_min": {"p":[], "D": [], "KL": []},     #Minimum Weibull (see Frechet)
+    "weibull_max": {"p":[], "D": [], "KL": []},     #Maximum Weibull (see Frechet)
+    "wrapcauchy": {"p":[], "D": [], "KL": []},      #Wrapped Cauchy
+    "ksone": {"p":[], "D": [], "KL": []},           #Kolmogorov-Smirnov one-sided (no stats)
+    "kstwobign": {"p":[], "D": [], "KL": []}}       #Kolmogorov-Smirnov two-sided test for Large N
 
 ########################################################################################
 
@@ -115,17 +116,21 @@ def check(data, fct, verbose=False):
     #Applying the Kolmogorov-Smirnof two sided test
     D, p = scipy.stats.kstest(data, fct, args=parameters)
 
+    f = eval("scipy.stats." + fct + ".freeze" + str(parameters))
+    x = numpy.linspace(f.ppf(0.001), f.ppf(0.999), len(data))
+    KL = scipy.stats.entropy(data, qk=f.pdf(x))
+
     if math.isnan(p): p=0
     if math.isnan(D): D=0
 
     if verbose:
         print(fct.ljust(16) + "p: " + str(p).ljust(25) + "D: " +str(D))
 
-    return (fct, p, D)
+    return (fct, p, D, KL)
 
 ########################################################################################
 
-def dist_check_main(data, iterative, exclude=10.0, processes=2, top=10):
+def dist_check_main(data, iterative, processes=1, exclude=10.0):
 
     #########################################################################################
     # parser = OptionParser()
@@ -154,25 +159,28 @@ def dist_check_main(data, iterative, exclude=10.0, processes=2, top=10):
         results = Parallel(n_jobs=processes)(delayed(check)(data, fct) for fct in cdfs.keys())
 
         for res in results:
-            key, p, D = res
+            key, p, D, KL = res
             cdfs[key]["p"].append(p)
             cdfs[key]["D"].append(D)
+            cdfs[key]["KL"].append(KL)
 
         # print( "-------------------------------------------------------------------" )
-        # print( "Top %d after %d iteration(s)" % (top, i+1, ) )
+        # print( "Top %d after %d iteration(s)" % (10, i+1, ) )
         # print( "-------------------------------------------------------------------" )
-        best = sorted(cdfs.items(), key=lambda elem : scipy.median(elem[1]["p"]), reverse=True)
+        best = sorted(cdfs.items(), key=lambda elem : scipy.median(elem[1]["KL"]), reverse=False)
         best_dist = best[0][0]
 
-        # for t in range(top):
+        # for t in range(10):
         #     fct, values = best[t]
         #     print( str(t+1).ljust(4), fct.ljust(16),
         #            "\tp: ", scipy.median(values["p"]),
         #            "\tD: ", scipy.median(values["D"]),
+        #            "\tKL: ", scipy.median(values["KL"]),
         #            end="")
         #     if len(values["p"]) > 1:
         #         print("\tvar(p): ", scipy.var(values["p"]),
-        #               "\tvar(D): ", scipy.var(values["D"]), end="")
+        #               "\tvar(D): ", scipy.var(values["D"]),
+        #               "\tvar(KL): ", scipy.var(values["KL"]), end="")
         #     print()
 
     return best_dist
