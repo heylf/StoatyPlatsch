@@ -6,7 +6,7 @@ from dist_check import dist_check_main
 
 from scipy import signal
 
-def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes, **kwargs):
+def update_spec_from_peaks(spec, minimal_height, distance, peak_width, dist, processes, **kwargs):
     x = spec['x']
     y = spec['y']
 
@@ -82,18 +82,40 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
     peak_indicies = numpy.array(true_positives)
     peak_indicies.sort()
 
+    widths = scipy.signal.peak_widths(y, peak_indicies)[0]
+
     fitted_profiles_dict = dict()
     std = [-1] * len(peak_indicies)
     symetric = [0] * len(peak_indicies)
     for i in range(0, len(peak_indicies)):
 
         s = left_local_minimum_dict[peak_indicies[i]]
-        e = right_local_minimum_dict[peak_indicies[i]]+1
+        e = right_local_minimum_dict[peak_indicies[i]] + 1
+
+        #s = int(peak_indicies[i] - widths[i])# - 1
+        #e = int(peak_indicies[i] + widths[i]) + 1
+
+        if ( s < 0 ):
+            s = 0
+        if ( e > (len(y)-1) ):
+            e = len(y)-1
 
         subpeak_y = y[s:e]
         subpeak_x = [x for x in range(len(subpeak_y))]
 
-        best_subpeak_dist_type = dist_check_main(subpeak_y, 1, processes)
+        # There are no negative read counts and nans
+        norm_subpeak_y = numpy.array([-1.0] * len(subpeak_y))
+
+        min_of_subpeak_y = float(numpy.min(subpeak_y))
+        max_of_subpeak_y = float(numpy.max(subpeak_y))
+
+        for j in range(0, len(norm_subpeak_y)):
+            norm_subpeak_y[j] = ( ( float(subpeak_y[j]) - min_of_subpeak_y ) / ( max_of_subpeak_y - min_of_subpeak_y) )
+
+        if ( dist == "" ):
+            best_subpeak_dist_type = dist_check_main(norm_subpeak_y, 1, processes)
+        else:
+            best_subpeak_dist_type = dist
 
         print(best_subpeak_dist_type)
 
@@ -113,9 +135,7 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
         # max min normalize fitted_profile so fitted profile fits better the real data
         max_of_fitted = numpy.max(fitted_y)
         for j in range(0, len(fitted_y)):
-            a = ( fitted_y[j] - min_of_fitted )
-            b = ( max_of_fitted - min_of_fitted)
-            fitted_y[j] =  ( a / b )
+            fitted_y[j] =  ( ( fitted_y[j] - min_of_fitted ) / ( max_of_fitted - min_of_fitted) )
 
         # There are no negative read counts and nans
         for j in range(0, len(fitted_y)):
@@ -126,7 +146,7 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
         fitted_y = fitted_y * numpy.max(subpeak_y)
 
         # Testing for skewness
-        testing_skewness_quantiles = numpy.linspace(subpeak_f.ppf(0.001), subpeak_f.ppf(0.999), 100)
+        testing_skewness_quantiles = numpy.linspace(subpeak_f.ppf(0.001), subpeak_f.ppf(0.999), 500)
         testing_skewness_pdfs = subpeak_f.pdf(testing_skewness_quantiles)
 
         max_of_skew = numpy.max(testing_skewness_pdfs)
@@ -139,16 +159,26 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
             if( numpy.isnan(testing_skewness_pdfs[j]) ):
                 testing_skewness_pdfs[j] = 0.0
 
-        # profile_fig = plt.figure(figsize=(20, 4), dpi=80)
-        # ax = profile_fig.add_subplot(1,1,1)
-        # ax.plot([x for x in range(100)], testing_skewness_pdfs)
-        # ax.set_xlabel('Relative Nucleotide Position')
-        # ax.set_ylabel('Intensity')
-        # profile_fig.savefig('{}/testprofile.pdf'.format("/home/florian/Documents/github/StoatyPlatsch"), bbox_inches='tight')
+        profile_fig = plt.figure(figsize=(20, 4), dpi=80)
+        ax = profile_fig.add_subplot(1,1,1)
+        ax.plot([x for x in range(500)], testing_skewness_pdfs)
+        ax.set_xlabel('Relative Nucleotide Position')
+        ax.set_ylabel('Intensity')
+        profile_fig.savefig('{}/testprofile.pdf'.format("/home/florian/Documents/github/StoatyPlatsch"), bbox_inches='tight')
+
+        profile_fig2 = plt.figure(figsize=(20, 4), dpi=80)
+        ax2 = profile_fig2.add_subplot(1,1,1)
+        ax2.plot(subpeak_x, norm_subpeak_y)
+        ax2.set_xlabel('Relative Nucleotide Position')
+        ax2.set_ylabel('Intensity')
+        profile_fig2.savefig('{}/testprofile2.pdf'.format("/home/florian/Documents/github/StoatyPlatsch"), bbox_inches='tight')
 
         # first condittion for constant profiles
+        print(scipy.stats.skewtest(testing_skewness_pdfs)[1])
         if ( not all(i == numpy.max(testing_skewness_pdfs) for i in testing_skewness_pdfs) ):
-            if( scipy.stats.skewtest(testing_skewness_pdfs)[1] < 0.05 ):
+            skewness = sum(abs(testing_skewness_pdfs - numpy.flip(testing_skewness_pdfs)))
+            print(skewness)
+            if( scipy.stats.skewtest(testing_skewness_pdfs)[1] < 0.1 and skewness > 1.0 ):
                 t = numpy.argmax(testing_skewness_pdfs)
                 if (  t < int((len(testing_skewness_pdfs)-1)/2) ):
                     symetric[i] = 1
@@ -173,7 +203,6 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
             summit_index_fitted_y = numpy.ceil(len(fitted_y)/2)-1
 
         summit_index_fitted_y = s + summit_index_fitted_y
-
         shift = peak_indicies[i] - summit_index_fitted_y
         s += shift
         e += shift
@@ -187,6 +216,7 @@ def update_spec_from_peaks(spec, minimal_height, distance, peak_width, processes
             e = (len(y) - 1)
 
         full_fitted_y = numpy.zeros(len(y))
+
         full_fitted_y[s:e] = fitted_y
 
         fitted_profiles_dict[peak_indicies[i]] = full_fitted_y

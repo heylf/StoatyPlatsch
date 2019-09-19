@@ -109,7 +109,7 @@ def main():
     parser.add_argument(
         "--distance",
         metavar='int',
-        default=5,
+        default=2,
         help="It is the minimal required distance each local maxima have to be apart. Decreasing the parameter"
              "will result in overfitting (more peaks). [Default: 10]")
     parser.add_argument(
@@ -118,6 +118,17 @@ def main():
         default=1,
         help="This parameter defines the width of the newly defined peak binding sites. It is the number of standard"
              "deviations of the undelying modelled distribution.")
+    parser.add_argument(
+        "--std_skewed",
+        metavar='int',
+        default=1,
+        help="This parameter defines the width of the newly defined peak binding sites. It is the number of standard"
+             "deviations of the undelying modelled distribution. It is important for skewed peaks.")
+    parser.add_argument(
+        "--dist",
+        metavar='str',
+        default="",
+        help="")
 
     ######################
     ##   CHECKS INPUT   ##
@@ -334,7 +345,9 @@ def main():
     plot_counter = 1
 
     #for peak in range( 0, len(cov_matrix) ):
-    for peak in range(9, 10):
+    for peak in range(0, 1):
+
+        peak = 22
 
         # data of the peak
         data = data_dict[peak]
@@ -363,7 +376,7 @@ def main():
 
         # Peak Detection Plot
         list_of_update_spec_from_peaks = update_spec_from_peaks(spec, minimal_height=args.min_height, distance=args.distance,
-                                                                peak_width=args.max_width, processes=4)
+                                                                peak_width=args.max_width, dist=args.dist, processes=4)
 
         peaks_found = list_of_update_spec_from_peaks[0]
         found_local_minima = list_of_update_spec_from_peaks[1]
@@ -399,28 +412,29 @@ def main():
 
                     print("Skewness " + str(symmetry[p]))
 
+                    std_other = 2
+
+                    # End+1 because genome coordinates starts at zero (end-1, see info bedtools coverage).
                     if ( symmetry[p] == 0 ):
                         peak_start_list[p] = real_coordinates_list[peak_center] - left_right_extension
                         peak_end_list[p] = real_coordinates_list[peak_center] + left_right_extension + 1
-                        # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
 
                         rectangle_start_list[p] = peak_center - left_right_extension
-                        rectangle_end_list[p] = peak_center + left_right_extension + 1
+                        rectangle_end_list[p] = peak_center + left_right_extension
 
                     if ( symmetry[p] == -1 ):
-                        peak_start_list[p] = real_coordinates_list[peak_center] - left_right_extension
-                        peak_end_list[p] = real_coordinates_list[peak_center] + 1
+                        peak_start_list[p] = real_coordinates_list[peak_center] - int(std_other * left_right_extension)
+                        peak_end_list[p] = real_coordinates_list[peak_center] + int(args.std_skewed * left_right_extension) + 1
 
-                        rectangle_start_list[p] = peak_center - left_right_extension
-                        rectangle_end_list[p] = peak_center + 1
+                        rectangle_start_list[p] = peak_center - int(std_other * left_right_extension)
+                        rectangle_end_list[p] = peak_center + int(args.std_skewed * left_right_extension)
 
                     if ( symmetry[p] == 1 ):
-                        peak_start_list[p] = real_coordinates_list[peak_center]
-                        peak_end_list[p] = real_coordinates_list[peak_center] + left_right_extension + 1
-                        # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+                        peak_start_list[p] = real_coordinates_list[peak_center] - int(args.std_skewed * left_right_extension)
+                        peak_end_list[p] = real_coordinates_list[peak_center] + int(std_other * left_right_extension) + 1
 
-                        rectangle_start_list[p] = peak_center
-                        rectangle_end_list[p] = peak_center + left_right_extension + 1
+                        rectangle_start_list[p] = peak_center - int(args.std_skewed * left_right_extension)
+                        rectangle_end_list[p] = peak_center + int(std_other * left_right_extension)
 
                     if ( peak_start_list[p] < 0 ):
                         peak_start_list[p] = 0
