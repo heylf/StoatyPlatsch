@@ -115,7 +115,7 @@ def main():
     parser.add_argument(
         "--std",
         metavar='int',
-        default=1,
+        default=2,
         help="This parameter defines the width of the newly defined peak binding sites. It is the number of standard"
              "deviations of the undelying modelled distribution.")
 
@@ -397,6 +397,22 @@ def main():
                     dist_index += 1
 
             # Fitting Plot
+            bic = 100000
+            possible_dist = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel']
+            for m in spec['model']:
+                d_final = ''
+                for d in possible_dist:
+                    print(d)
+                    m['type'] = d
+                    model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
+                    output = model.fit(spec['y'], params, x=spec['x'])
+                    if ( output.bic < bic ):
+                        d_final = d
+                m['type'] = d_final
+
+            print(spec)
+
+
             model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
 
             output = model.fit(spec['y'], params, x=spec['x'])
@@ -450,13 +466,13 @@ def main():
 
             # Plot Area
             if (len(peaks_found) > 1 and plot_counter <= 10):
-                ax = profile_fig.add_subplot(2, 5, plot_counter)
+                ax = profile_fig.add_subplot(1, 1, 1)
                 ax.plot(pre_x, pre_y)
                 ax.set_xlabel('Relative Nucleotide Position')
                 ax.set_ylabel('Intensity')
                 ax.axes.get_xaxis().set_ticks([])
 
-                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
+                ax2 = fig_extremas.add_subplot(1, 1, 1)
                 ax2.plot(x, y)
                 ax2.plot(x, inv_y)
                 ax2.plot(peaks_found, y[peaks_found], "o")
@@ -476,7 +492,7 @@ def main():
                     max_y_plot = max(y)
 
                 c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
-                ax3 = fig_deconvolution.add_subplot(2, 5, plot_counter)
+                ax3 = fig_deconvolution.add_subplot(1, 1, 1)
                 # Add rectangles
                 for i, model in enumerate(spec['model']):
                     ax3.plot(spec['x'], components[f'm{i}_'], color=c[i])

@@ -96,7 +96,7 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
     numpy.random.shuffle(peak_indicies)
     for peak_indicie, model_indicie in zip(peak_indicies.tolist(), model_indicies):
         model = spec['model'][model_indicie]
-        if model['type'] in ['GaussianModel', 'LorentzianModel', 'VoigtModel']:
+        if model['type'] in ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel']:
             params = {
                 'height': y[peak_indicie],
                 #'sigma': x_range / len(x) * numpy.min(peak_widths),

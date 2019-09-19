@@ -4,7 +4,8 @@ def get_best_values(spec, output):
     model_params = {
         'GaussianModel':   ['amplitude', 'sigma'],
         'LorentzianModel': ['amplitude', 'sigma'],
-        'VoigtModel':      ['amplitude', 'sigma', 'gamma']
+        'VoigtModel':      ['amplitude', 'sigma', 'gamma'],
+        'SkewedGaussianModel': ['amplitude', 'sigma', 'gamma']
     }
     best_values = output.best_values
     centeres = []
