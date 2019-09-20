@@ -7,11 +7,15 @@ import matplotlib.patches as patches
 import os
 import numpy
 import sys
+import multiprocessing
+
+import time
 
 from update_spec import update_spec_from_peaks
 from generate_model import generate_model
 from rainbow_colors import color_linear_gradient
 from get_best_values import get_best_values
+from ctypes import c_char_p
 
 font = {'family' : 'serif'}
 matplotlib.rc('font', **font)
@@ -26,6 +30,11 @@ def get_line_count(file):
     for line in file:
         count += 1
     return count
+
+def fitting(spec, possible_dist, min_width, max_width, return_dict, dist):
+    model, params = generate_model(spec, possible_dist, min_width, max_width)
+    output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+    return_dict[dist] = output.bic
 
 def main():
 
@@ -310,6 +319,13 @@ def main():
 
     print("[NOTE] Start Deconvolution")
 
+    possible_dist = ['GaussianModel', 'LorentzianModel', 'VoigtModel',
+                     'SkewedGaussianModel', 'MoffatModel', 'Pearson7Model',
+                     'StudentsTModel', 'BreitWignerModel',
+                     'DampedOscillatorModel', 'DampedHarmonicOscillatorModel',
+                     'ExponentialGaussianModel', 'SkewedVoigtModel', 'DonaichModel',
+                     'RectangleModel', 'StepModel']
+
     # Read in extended peak file of the coverage calculation for peak meta data.
     for_data_peaks_file = open(extended_peak_file_name, "r")
     data_dict = {}
@@ -336,6 +352,8 @@ def main():
     #for peak in range( 0, len(cov_matrix) ):
     for peak in range(9, 10):
 
+        peak = 21
+
         # data of the peak
         data = data_dict[peak]
         chr = data[0]
@@ -358,7 +376,7 @@ def main():
 
         # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
         # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-        num_padding = 40
+        num_padding = 0
 
         # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
         x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
@@ -376,7 +394,8 @@ def main():
         peaks_indices_array = [i for i in range(0, args.max_peaks)]
 
         # Peak Detection Plot
-        list_of_update_spec_from_peaks = update_spec_from_peaks(args.output_folder, spec, peaks_indices_array, minimal_height=args.min_height,
+        list_of_update_spec_from_peaks = update_spec_from_peaks(args.output_folder, possible_dist, spec,
+                                                                peaks_indices_array, minimal_height=args.min_height,
                                                                 distance=args.distance, std=2)
         peaks_found = list_of_update_spec_from_peaks[0]
         found_local_minima = list_of_update_spec_from_peaks[1]
@@ -398,24 +417,49 @@ def main():
 
             # Fitting Plot
             bic = 100000
-            possible_dist = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel']
+
+            first_model = True
             for m in spec['model']:
-                d_final = ''
-                for d in possible_dist:
+                dist_to_ckeck = possible_dist
+
+                if ( not first_model ):
+                    dist_to_ckeck = possible_dist[2:]
+
+                pool = multiprocessing.Pool(4)
+                manager = multiprocessing.Manager()
+                return_dict = manager.dict()
+
+                start_time = time.time()
+                for d in dist_to_ckeck:
+                    print(spec)
+                    print(bic)
                     print(d)
                     m['type'] = d
-                    model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
-                    output = model.fit(spec['y'], params, x=spec['x'])
-                    if ( output.bic < bic ):
-                        d_final = d
-                m['type'] = d_final
+                    #model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
+                    #output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+
+                    pool.apply_async(fitting, args=(spec, possible_dist, args.min_width, args.max_width, return_dict, d))
+
+                pool.close()
+                pool.join()
+
+                m['type'] = min(return_dict, key=return_dict.get)
+
+                print(spec)
+
+                print(return_dict)
+
+                end_time = time.time()
+                print('function took {} s'.format( end_time - start_time) )
+
+                sys.exit()
 
             print(spec)
 
 
-            model, params = generate_model(spec, min_peak_width=args.min_width, max_peak_width=args.max_width)
+            model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
 
-            output = model.fit(spec['y'], params, x=spec['x'])
+            output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
             #output.plot(data_kws={'markersize': 1})
             #plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
 
@@ -441,7 +485,8 @@ def main():
                     left_right_extension = numpy.floor((peak_sigma * args.std))
 
                     peak_start_list[i] = real_coordinates_list[peak_center] - left_right_extension
-                    peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1 # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+                    peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1
+                    # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
 
                     rectangle_start_list[i] = peak_center - left_right_extension
                     rectangle_end_list[i] = peak_center + left_right_extension

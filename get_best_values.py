@@ -5,7 +5,17 @@ def get_best_values(spec, output):
         'GaussianModel':   ['amplitude', 'sigma'],
         'LorentzianModel': ['amplitude', 'sigma'],
         'VoigtModel':      ['amplitude', 'sigma', 'gamma'],
-        'SkewedGaussianModel': ['amplitude', 'sigma', 'gamma']
+        'SkewedGaussianModel': ['amplitude', 'sigma', 'gamma'],
+        'SkewedVoigtModel': ['amplitude', 'sigma', 'gamma'],
+        'MoffatModel':  ['amplitude', 'sigma', 'beta'],
+        'Pearson7Model': ['amplitude', 'sigma', 'exponent'],
+        'StudentsTModel': ['amplitude', 'sigma'],
+        'BreitWignerModel': ['amplitude', 'sigma', 'q'],
+        'DampedOscillatorModel': ['amplitude', 'sigma'],
+        'DampedHarmonicOscillatorModel': ['amplitude', 'sigma', 'gamma'],
+        'ExponentialGaussianModel': ['amplitude', 'sigma', 'gamma'],
+        'DonaichModel': ['amplitude', 'sigma', 'gamma'],
+        'StepModel': ['amplitude', 'sigma']
     }
     best_values = output.best_values
     centeres = []
