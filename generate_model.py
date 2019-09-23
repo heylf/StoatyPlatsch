@@ -2,7 +2,7 @@ import numpy
 
 from lmfit import models
 
-def generate_model(spec, possible_dist, min_peak_width, max_peak_width, ):
+def generate_model(spec, possible_dist, min_peak_width, max_peak_width):
     composite_model = None
     params = None
     y = spec['y']

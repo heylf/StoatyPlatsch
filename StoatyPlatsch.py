@@ -349,10 +349,14 @@ def main():
 
     plot_counter = 1
 
-    #for peak in range( 0, len(cov_matrix) ):
-    for peak in range(9, 10):
+    estimated_dists = [args.peak_model]
+    number_of_peaks_for_estimation = 5
+    estimation_count = 0
 
-        peak = 21
+    #for peak in range( 0, len(cov_matrix) ):
+    for peak in range(0, 30):
+
+        print(peak)
 
         # data of the peak
         data = data_dict[peak]
@@ -376,7 +380,7 @@ def main():
 
         # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
         # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-        num_padding = 0
+        num_padding = 40
 
         # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
         x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
@@ -416,46 +420,47 @@ def main():
                     dist_index += 1
 
             # Fitting Plot
-            bic = 100000
+            #bic = 100000
 
             first_model = True
             for m in spec['model']:
-                dist_to_ckeck = possible_dist
+                dist_not_to_ckeck = ""
 
                 if ( not first_model ):
-                    dist_to_ckeck = possible_dist[2:]
+                    dist_not_to_ckeck = args.peak_model
 
                 pool = multiprocessing.Pool(4)
                 manager = multiprocessing.Manager()
                 return_dict = manager.dict()
 
                 start_time = time.time()
-                for d in dist_to_ckeck:
-                    print(spec)
-                    print(bic)
-                    print(d)
-                    m['type'] = d
-                    #model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
-                    #output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+                for d in possible_dist:
+                    if ( d != dist_not_to_ckeck ):
+                        m['type'] = d
+                        #model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
+                        #output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
 
-                    pool.apply_async(fitting, args=(spec, possible_dist, args.min_width, args.max_width, return_dict, d))
+                        pool.apply_async(fitting, args=(spec, possible_dist, args.min_width, args.max_width, return_dict, d))
 
                 pool.close()
                 pool.join()
 
                 m['type'] = min(return_dict, key=return_dict.get)
 
-                print(spec)
-
-                print(return_dict)
+                if ( estimation_count < number_of_peaks_for_estimation ):
+                    estimated_dists.append(m['type'])
 
                 end_time = time.time()
                 print('function took {} s'.format( end_time - start_time) )
 
-                sys.exit()
+            print("[NOTE] Fitting Model")
 
-            print(spec)
+            if ( estimation_count == number_of_peaks_for_estimation ):
+                possible_dist = list(set(estimated_dists))
+            else:
+                estimation_count += 1
 
+            print(possible_dist)
 
             model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
 
@@ -511,13 +516,13 @@ def main():
 
             # Plot Area
             if (len(peaks_found) > 1 and plot_counter <= 10):
-                ax = profile_fig.add_subplot(1, 1, 1)
+                ax = profile_fig.add_subplot(2, 5, plot_counter)
                 ax.plot(pre_x, pre_y)
                 ax.set_xlabel('Relative Nucleotide Position')
                 ax.set_ylabel('Intensity')
                 ax.axes.get_xaxis().set_ticks([])
 
-                ax2 = fig_extremas.add_subplot(1, 1, 1)
+                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
                 ax2.plot(x, y)
                 ax2.plot(x, inv_y)
                 ax2.plot(peaks_found, y[peaks_found], "o")
@@ -537,7 +542,7 @@ def main():
                     max_y_plot = max(y)
 
                 c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
-                ax3 = fig_deconvolution.add_subplot(1, 1, 1)
+                ax3 = fig_deconvolution.add_subplot(2, 5, plot_counter)
                 # Add rectangles
                 for i, model in enumerate(spec['model']):
                     ax3.plot(spec['x'], components[f'm{i}_'], color=c[i])
