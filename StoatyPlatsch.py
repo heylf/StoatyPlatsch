@@ -36,6 +36,82 @@ def fitting(spec, possible_dist, min_width, max_width, return_dict, dist):
     output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
     return_dict[dist] = output.bic
 
+def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_width, max_width, min_height,
+                  distance, possible_dist, num_padding, deconvolution_dict, shapes_in_peaks, estimate_counter,
+                  num_peaks_for_estimation):
+
+    # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+    pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
+    pre_y = cov_matrix[peak]
+
+    # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+    x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
+    y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
+
+    models_dict_array = [{'type': peak_model} for i in range(0, max_peaks)]
+
+    spec = {
+        'x': x,
+        'y': y,
+        'model': models_dict_array
+    }
+
+    peaks_indices_array = [i for i in range(0, max_peaks)]
+
+    # Peak Detection Plot
+    list_of_update_spec_from_peaks = update_spec_from_peaks(output_folder, possible_dist, spec,
+                                                            peaks_indices_array, minimal_height=min_height,
+                                                            distance=distance, std=2)
+    peaks_found = list_of_update_spec_from_peaks[0]
+    found_local_minima = list_of_update_spec_from_peaks[1]
+
+    # Check number of potential local maxima
+    if (len(peaks_found) != 0):
+
+        # Check for distributions to be deleted
+        dist_index = 0
+        while dist_index < len(spec['model']):
+            if 'params' not in spec['model'][dist_index]:
+                del spec['model'][dist_index]
+            else:
+                dist_index += 1
+
+        # Fitting Plot
+        dist_not_to_ckeck = ""
+        for m in spec['model']:
+
+            return_dict = dict()
+
+            for d in possible_dist:
+                if (d != dist_not_to_ckeck):
+                    m['type'] = d
+                    fitting(spec, possible_dist, min_width, max_width, return_dict, d)
+
+            m['type'] = min(return_dict, key=return_dict.get)
+            dist_not_to_ckeck = peak_model
+            shapes_in_peaks.append(m['type'])
+
+        model, params = generate_model(spec, possible_dist, min_peak_width=min_width,
+                                       max_peak_width=max_width)
+
+        output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+
+        peaks_in_profile = get_best_values(spec, output)
+        components = output.eval_components(x=x)
+
+        print("yes")
+        print(peak)
+        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, peaks_in_profile, components]
+
+        if ( estimate_counter['v'] == num_peaks_for_estimation ):
+            possible_dist = list(set(shapes_in_peaks))
+        else:
+            estimate_counter['v'] = estimate_counter['v'] + 1
+    else:
+        print("no")
+        print(peak)
+        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, None, None]
+
 def main():
 
     ####################
@@ -319,13 +395,6 @@ def main():
 
     print("[NOTE] Start Deconvolution")
 
-    possible_dist = ['GaussianModel', 'LorentzianModel', 'VoigtModel',
-                     'SkewedGaussianModel', 'MoffatModel', 'Pearson7Model',
-                     'StudentsTModel', 'BreitWignerModel',
-                     'DampedOscillatorModel', 'DampedHarmonicOscillatorModel',
-                     'ExponentialGaussianModel', 'SkewedVoigtModel', 'DonaichModel',
-                     'RectangleModel', 'StepModel']
-
     # Read in extended peak file of the coverage calculation for peak meta data.
     for_data_peaks_file = open(extended_peak_file_name, "r")
     data_dict = {}
@@ -335,28 +404,63 @@ def main():
         counter_peaks += 1
     for_data_peaks_file.close()
 
+    # estimated_dists = [args.peak_model]
+    # number_of_peaks_for_estimation = 5
+    # estimation_count = 0
+
+    pool = multiprocessing.Pool(4)
+    manager = multiprocessing.Manager()
+    deconvolution_dict = manager.dict()
+    shapes_in_peaks = manager.list()
+    possible_dist = manager.list(['GaussianModel', 'LorentzianModel', 'VoigtModel',
+                     'SkewedGaussianModel', 'MoffatModel', 'Pearson7Model',
+                     'StudentsTModel', 'BreitWignerModel',
+                     'DampedOscillatorModel', 'DampedHarmonicOscillatorModel',
+                     'ExponentialGaussianModel', 'SkewedVoigtModel', 'DonaichModel',
+                     'RectangleModel', 'StepModel'])
+    estimate_counter = manager.dict({'v': 1})
+
+    # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
+    # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
+    num_padding = 40
+
+    print("[NOTE] Fitting Model")
+
+    #for peak in range( 0, len(cov_matrix) ):
+    start_time = time.time()
+    for peak in range(0, 30):
+
+        print(peak)
+
+        pool.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+                                              num_padding, deconvolution_dict, shapes_in_peaks, estimate_counter, 5))
+
+    pool.close()
+    pool.join()
+
+    end_time = time.time()
+    print('function took {} s'.format( end_time - start_time) )
+
+    print(shapes_in_peaks)
+
+    print("[NOTE] Generate Output")
+
     output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
     output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
     output_table_new_peaks = open('{}/final_tab_all_peaks.bed'.format(args.output_folder), "w")
 
-    profile_fig = plt.figure(figsize=(20, 4), dpi=80)
+    fig_profile = plt.figure(figsize=(20, 4), dpi=80)
     fig_extremas = plt.figure(figsize=(20, 4), dpi=80)
     fig_deconvolution = plt.figure(figsize=(20, 4), dpi=80)
 
-    profile_fig.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig_profile.subplots_adjust(hspace=0.3, wspace=0.3)
     fig_extremas.subplots_adjust(hspace=0.3, wspace=0.3)
     fig_deconvolution.subplots_adjust(hspace=0.3, wspace=0.3)
 
     plot_counter = 1
 
-    estimated_dists = [args.peak_model]
-    number_of_peaks_for_estimation = 5
-    estimation_count = 0
-
-    #for peak in range( 0, len(cov_matrix) ):
     for peak in range(0, 30):
-
-        print(peak)
 
         # data of the peak
         data = data_dict[peak]
@@ -371,6 +475,11 @@ def main():
         pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
         pre_y = cov_matrix[peak]
 
+        # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+        x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
+        y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
+        inv_y = y * -1
+
         #y = cov_matrix[9]
         #y = cov_matrix[15]
         #y = cov_matrix[21]
@@ -378,31 +487,12 @@ def main():
         #y = cov_matrix[47]
         #y = cov_matrix[50]
 
-        # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
-        # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
-        num_padding = 40
-
-        # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
-        x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
-        y = numpy.pad(pre_y, (int(num_padding/2), int(num_padding/2)), 'constant', constant_values=(0, 0))
-        inv_y = y * -1
-
-        models_dict_array = [{'type': args.peak_model} for i in range(0,args.max_peaks)]
-
-        spec = {
-            'x': x,
-            'y': y,
-            'model': models_dict_array
-        }
-
-        peaks_indices_array = [i for i in range(0, args.max_peaks)]
-
-        # Peak Detection Plot
-        list_of_update_spec_from_peaks = update_spec_from_peaks(args.output_folder, possible_dist, spec,
-                                                                peaks_indices_array, minimal_height=args.min_height,
-                                                                distance=args.distance, std=2)
-        peaks_found = list_of_update_spec_from_peaks[0]
-        found_local_minima = list_of_update_spec_from_peaks[1]
+        # Get new peaks
+        peaks_found = deconvolution_dict[peak][0]
+        found_local_minima = deconvolution_dict[peak][1]
+        spec = deconvolution_dict[peak][2]
+        peaks_in_profile = deconvolution_dict[peak][3]
+        components = deconvolution_dict[peak][4]
 
         new_start = start - int(num_padding/2)
         new_end = end + int(num_padding/2)
@@ -411,67 +501,8 @@ def main():
         # Check number of potential local maxima
         if( len(peaks_found) != 0 ):
 
-            # Check for distributions to be deleted
-            dist_index = 0
-            while dist_index < len(spec['model']):
-                if 'params' not in spec['model'][dist_index]:
-                    del spec['model'][dist_index]
-                else:
-                    dist_index += 1
-
-            # Fitting Plot
-            #bic = 100000
-
-            first_model = True
-            for m in spec['model']:
-                dist_not_to_ckeck = ""
-
-                if ( not first_model ):
-                    dist_not_to_ckeck = args.peak_model
-
-                pool = multiprocessing.Pool(4)
-                manager = multiprocessing.Manager()
-                return_dict = manager.dict()
-
-                start_time = time.time()
-                for d in possible_dist:
-                    if ( d != dist_not_to_ckeck ):
-                        m['type'] = d
-                        #model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
-                        #output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-
-                        pool.apply_async(fitting, args=(spec, possible_dist, args.min_width, args.max_width, return_dict, d))
-
-                pool.close()
-                pool.join()
-
-                m['type'] = min(return_dict, key=return_dict.get)
-
-                if ( estimation_count < number_of_peaks_for_estimation ):
-                    estimated_dists.append(m['type'])
-
-                end_time = time.time()
-                print('function took {} s'.format( end_time - start_time) )
-
-            print("[NOTE] Fitting Model")
-
-            if ( estimation_count == number_of_peaks_for_estimation ):
-                possible_dist = list(set(estimated_dists))
-            else:
-                estimation_count += 1
-
-            print(possible_dist)
-
-            model, params = generate_model(spec, possible_dist, min_peak_width=args.min_width, max_peak_width=args.max_width)
-
-            output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-            #output.plot(data_kws={'markersize': 1})
-            #plt.savefig('{}/profile_fit.pdf'.format(args.output_folder))
-
             # Get new peaks
-            peaks_in_profile = get_best_values(spec, output)
             num_deconvoluted_peaks = len(peaks_in_profile[0])
-            components = output.eval_components(x=spec['x'])
 
             peak_start_list = [start] * num_deconvoluted_peaks
             peak_end_list = [end] * num_deconvoluted_peaks
@@ -516,7 +547,7 @@ def main():
 
             # Plot Area
             if (len(peaks_found) > 1 and plot_counter <= 10):
-                ax = profile_fig.add_subplot(2, 5, plot_counter)
+                ax = fig_profile.add_subplot(2, 5, plot_counter)
                 ax.plot(pre_x, pre_y)
                 ax.set_xlabel('Relative Nucleotide Position')
                 ax.set_ylabel('Intensity')
@@ -562,7 +593,7 @@ def main():
             summit = real_coordinates_list[numpy.argmax(pre_y)]
             output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
 
-    profile_fig.savefig('{}/profile.pdf'.format(args.output_folder), bbox_inches='tight')
+    fig_profile.savefig('{}/profile.pdf'.format(args.output_folder), bbox_inches='tight')
     fig_extremas.savefig('{}/profile_peaks.pdf'.format(args.output_folder), bbox_inches='tight')
     fig_deconvolution.savefig('{}/profile_deconvolution.pdf'.format(args.output_folder), bbox_inches='tight')
 
