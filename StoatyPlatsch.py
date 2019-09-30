@@ -37,8 +37,7 @@ def fitting(spec, possible_dist, min_width, max_width, return_dict, dist):
     return_dict[dist] = output.bic
 
 def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_width, max_width, min_height,
-                  distance, possible_dist, num_padding, deconvolution_dict, shapes_in_peaks, estimate_counter,
-                  num_peaks_for_estimation):
+                  distance, possible_dist, num_padding, deconvolution_dict, shapes_in_peaks):
 
     # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
     pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
@@ -102,11 +101,6 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
         print("yes")
         print(peak)
         deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, peaks_in_profile, components]
-
-        if ( estimate_counter['v'] == num_peaks_for_estimation ):
-            possible_dist = list(set(shapes_in_peaks))
-        else:
-            estimate_counter['v'] = estimate_counter['v'] + 1
     else:
         print("no")
         print(peak)
@@ -418,23 +412,22 @@ def main():
                      'DampedOscillatorModel', 'DampedHarmonicOscillatorModel',
                      'ExponentialGaussianModel', 'SkewedVoigtModel', 'DonaichModel',
                      'RectangleModel', 'StepModel'])
-    estimate_counter = manager.dict({'v': 1})
 
     # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
     # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
     num_padding = 40
 
-    print("[NOTE] Fitting Model")
+    print("[NOTE] Peak Shape Estimation")
 
     #for peak in range( 0, len(cov_matrix) ):
     start_time = time.time()
-    for peak in range(0, 30):
+    for peak in range(0, 8):
 
         print(peak)
 
         pool.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
                                               args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-                                              num_padding, deconvolution_dict, shapes_in_peaks, estimate_counter, 5))
+                                              num_padding, deconvolution_dict, shapes_in_peaks))
 
     pool.close()
     pool.join()
@@ -442,7 +435,23 @@ def main():
     end_time = time.time()
     print('function took {} s'.format( end_time - start_time) )
 
+    possible_dist = list(set(shapes_in_peaks))
     print(shapes_in_peaks)
+    print(possible_dist)
+
+    print("[NOTE] Fitting Model")
+
+    pool2 = multiprocessing.Pool(4)
+    for peak in range(8, 30):
+
+        print(peak)
+
+        pool2.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+                                              num_padding, deconvolution_dict, shapes_in_peaks))
+
+    pool2.close()
+    pool2.join()
 
     print("[NOTE] Generate Output")
 
