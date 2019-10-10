@@ -31,11 +31,6 @@ def get_line_count(file):
         count += 1
     return count
 
-def fitting(spec, possible_dist, min_width, max_width, return_dict, dist):
-    model, params = generate_model(spec, possible_dist, min_width, max_width)
-    output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-    return_dict[dist] = output.bic
-
 def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_width, max_width, min_height,
                   distance, possible_dist, num_padding, deconvolution_dict, shapes_in_peaks):
 
@@ -58,9 +53,8 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
     peaks_indices_array = [i for i in range(0, max_peaks)]
 
     # Peak Detection Plot
-    list_of_update_spec_from_peaks = update_spec_from_peaks(output_folder, possible_dist, spec,
-                                                            peaks_indices_array, minimal_height=min_height,
-                                                            distance=distance, std=2)
+    list_of_update_spec_from_peaks = update_spec_from_peaks(output_folder, spec, peaks_indices_array,
+                                                            minimal_height=min_height, distance=distance, std=2)
     peaks_found = list_of_update_spec_from_peaks[0]
     found_local_minima = list_of_update_spec_from_peaks[1]
 
@@ -79,19 +73,20 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
         dist_not_to_ckeck = ""
         for m in spec['model']:
 
-            return_dict = dict()
+            bic_dict = dict()
 
             for d in possible_dist:
                 if (d != dist_not_to_ckeck):
                     m['type'] = d
-                    fitting(spec, possible_dist, min_width, max_width, return_dict, d)
+                    model, params = generate_model(spec, min_width, max_width)
+                    output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+                    bic_dict[d] = output.bic
 
-            m['type'] = min(return_dict, key=return_dict.get)
+            m['type'] = min(bic_dict, key=bic_dict.get)
             dist_not_to_ckeck = peak_model
             shapes_in_peaks.append(m['type'])
 
-        model, params = generate_model(spec, possible_dist, min_peak_width=min_width,
-                                       max_peak_width=max_width)
+        model, params = generate_model(spec, min_peak_width=min_width, max_peak_width=max_width)
 
         output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
 
@@ -213,6 +208,11 @@ def main():
         sys.exit("[ERROR] Peakfile has to be in bed6 format!")
     bedfile.close()
 
+    #TODO Check for correct distribution models
+
+    #######################
+    ##   PREPROCESSING   ##
+    #######################
 
     # Get the outfile name from the input read file.
     outfilename = args.input_bam.split("/")
@@ -387,6 +387,8 @@ def main():
     ## Start Deconvolution ###
     ##########################
 
+    number_of_threads = 20
+
     print("[NOTE] Start Deconvolution")
 
     # Read in extended peak file of the coverage calculation for peak meta data.
@@ -402,47 +404,56 @@ def main():
     # number_of_peaks_for_estimation = 5
     # estimation_count = 0
 
-    pool = multiprocessing.Pool(4)
+    pool = multiprocessing.Pool(number_of_threads)
     manager = multiprocessing.Manager()
     deconvolution_dict = manager.dict()
     shapes_in_peaks = manager.list()
-    possible_dist = manager.list(['GaussianModel', 'LorentzianModel', 'VoigtModel',
-                     'SkewedGaussianModel', 'MoffatModel', 'Pearson7Model',
-                     'StudentsTModel', 'BreitWignerModel',
-                     'DampedOscillatorModel', 'DampedHarmonicOscillatorModel',
-                     'ExponentialGaussianModel', 'SkewedVoigtModel', 'DonaichModel',
-                     'RectangleModel', 'StepModel'])
+    possible_dist = manager.list(['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
+                                  'SkewedVoigtModel', 'DonaichModel', 'RectangleModel', 'StepModel'])
 
     # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
     # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
     num_padding = 40
 
-    print("[NOTE] Peak Shape Estimation")
+    # start_time = time.time()
+    # for peak in range(0, 30):
+    #
+    #     print(peak)
+    #
+    #     deconvolution(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+    #                                           num_padding, deconvolution_dict, shapes_in_peaks)
+    #
+    # end_time = time.time()
+    # print('function took {} s'.format( end_time - start_time ) )
+    #
+    # sys.exit()
 
     #for peak in range( 0, len(cov_matrix) ):
-    start_time = time.time()
-    for peak in range(0, 8):
-
-        print(peak)
-
-        pool.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-                                              num_padding, deconvolution_dict, shapes_in_peaks))
-
-    pool.close()
-    pool.join()
-
-    end_time = time.time()
-    print('function took {} s'.format( end_time - start_time) )
-
-    possible_dist = list(set(shapes_in_peaks))
-    print(shapes_in_peaks)
-    print(possible_dist)
+    # start_time = time.time()
+    # for peak in range(0, 10):
+    #
+    #     print(peak)
+    #
+    #     pool.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+    #                                           num_padding, deconvolution_dict, shapes_in_peaks))
+    #
+    # pool.close()
+    # pool.join()
+    #
+    # end_time = time.time()
+    # print('function took {} s'.format( end_time - start_time ) )
+    #
+    # possible_dist = list(set(shapes_in_peaks))
+    # print(shapes_in_peaks)
+    # print(possible_dist)
 
     print("[NOTE] Fitting Model")
 
-    pool2 = multiprocessing.Pool(4)
-    for peak in range(8, 30):
+    pool2 = multiprocessing.Pool(number_of_threads)
+    start_time = time.time()
+    for peak in range(0, num_peaks):
 
         print(peak)
 
@@ -452,6 +463,9 @@ def main():
 
     pool2.close()
     pool2.join()
+
+    end_time = time.time()
+    print('function took {} s'.format( end_time - start_time ) )
 
     print("[NOTE] Generate Output")
 
@@ -469,7 +483,7 @@ def main():
 
     plot_counter = 1
 
-    for peak in range(0, 30):
+    for peak in range(0, num_peaks):
 
         # data of the peak
         data = data_dict[peak]
@@ -551,6 +565,7 @@ def main():
                 output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
             else:
                 output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
+                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, start, end, id, score, strand))
                 summit = real_coordinates_list[numpy.argmax(pre_y)]
                 output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
 
@@ -565,8 +580,8 @@ def main():
                 ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
                 ax2.plot(x, y)
                 ax2.plot(x, inv_y)
-                ax2.plot(peaks_found, y[peaks_found], "o")
-                ax2.plot(found_local_minima, inv_y[found_local_minima], "x")
+                ax2.plot(peaks_found, y[peaks_found], "o", markersize=2)
+                ax2.plot(found_local_minima, inv_y[found_local_minima], "x", markersize=2)
                 ax2.set_xlabel('Relative Nucleotide Position')
                 ax2.set_ylabel('Intensity')
 
@@ -599,6 +614,7 @@ def main():
                 plot_counter += 1
         else:
             output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
+            output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, start, end, id, score, strand))
             summit = real_coordinates_list[numpy.argmax(pre_y)]
             output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
 
