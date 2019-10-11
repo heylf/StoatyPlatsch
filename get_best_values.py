@@ -14,7 +14,8 @@ def get_best_values(spec, output):
     #     'DampedHarmonicOscillatorModel': ['amplitude', 'sigma', 'gamma'],
     #     'ExponentialGaussianModel': ['amplitude', 'sigma', 'gamma'],
     #     'DonaichModel': ['amplitude', 'sigma', 'gamma'],
-    #     'StepModel': ['amplitude', 'sigma']
+    #     'StepModel': ['amplitude', 'sigma'],
+    #     'RectangleModel': ['amplitude', 'sigma1', 'sigma2']
     # }
     best_values = output.best_values
     centeres = []

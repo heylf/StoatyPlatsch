@@ -14,8 +14,6 @@ import time
 from update_spec import update_spec_from_peaks
 from generate_model import generate_model
 from rainbow_colors import color_linear_gradient
-from get_best_values import get_best_values
-from ctypes import c_char_p
 
 font = {'family' : 'serif'}
 matplotlib.rc('font', **font)
@@ -59,7 +57,7 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
     found_local_minima = list_of_update_spec_from_peaks[1]
 
     # Check number of potential local maxima
-    if (len(peaks_found) != 0):
+    if (len(peaks_found) > 1):
 
         # Check for distributions to be deleted
         dist_index = 0
@@ -78,9 +76,14 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
             for d in possible_dist:
                 if (d != dist_not_to_ckeck):
                     m['type'] = d
+                    print(d)
                     model, params = generate_model(spec, min_width, max_width)
-                    output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-                    bic_dict[d] = output.bic
+                    try:
+                        output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+                        bic_dict[d] = output.bic
+                    except:
+                        print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
+                        bic_dict[d] = 1000000
 
             m['type'] = min(bic_dict, key=bic_dict.get)
             dist_not_to_ckeck = peak_model
@@ -88,14 +91,37 @@ def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_wi
 
         model, params = generate_model(spec, min_peak_width=min_width, max_peak_width=max_width)
 
-        output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+        output = None
+        optimizer_counter = 0
+        while output is None and optimizer_counter != 10:
+            try:
+                output = model.fit(spec['y'], params, x=spec['x'], nan_policy='raise')
+            except:
+                print("[ERROR 2] Fitting Problem. Model will be discarded and newly optimized.")
+                optimizer_counter += 1
+                pass
 
-        peaks_in_profile = get_best_values(spec, output)
+        if ( optimizer_counter == 10 ):
+            sys.exit("[FATAL ERROR 1] Optimization problem occured. Try to change hyperparameters.")
+
+        print(spec)
+        print(output.best_values)
+
+        sigma_of_peaks = []
+        best_values=output.best_values
+        for i, model in enumerate(spec['model']):
+            sigma_key = f'm{i}_' + "sigma"
+            if ( sigma_key in best_values ):
+                sigma_of_peaks.append(best_values[f'm{i}_' + "sigma"])
+            else:
+                sigma_of_peaks.append((best_values[f'm{i}_' + "sigma1"] + best_values[f'm{i}_' + "sigma2"])/2)
+
+        #sigma_of_peaks = get_best_values(spec, output)[1]
         components = output.eval_components(x=x)
 
         print("yes")
         print(peak)
-        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, peaks_in_profile, components]
+        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, sigma_of_peaks, components]
     else:
         print("no")
         print(peak)
@@ -387,7 +413,7 @@ def main():
     ## Start Deconvolution ###
     ##########################
 
-    number_of_threads = 20
+    number_of_threads = 4
 
     print("[NOTE] Start Deconvolution")
 
@@ -409,25 +435,26 @@ def main():
     deconvolution_dict = manager.dict()
     shapes_in_peaks = manager.list()
     possible_dist = manager.list(['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                                  'SkewedVoigtModel', 'DonaichModel', 'RectangleModel', 'StepModel'])
+                                  'SkewedVoigtModel', 'DonaichModel', 'StepModel'])
 
     # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
     # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
     num_padding = 40
 
-    # start_time = time.time()
-    # for peak in range(0, 30):
-    #
-    #     print(peak)
-    #
-    #     deconvolution(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-    #                                           num_padding, deconvolution_dict, shapes_in_peaks)
-    #
-    # end_time = time.time()
-    # print('function took {} s'.format( end_time - start_time ) )
-    #
-    # sys.exit()
+    start_time = time.time()
+    for peak in range(0, 65):
+
+        print(peak)
+
+        deconvolution(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+                                              num_padding, deconvolution_dict, shapes_in_peaks)
+
+    end_time = time.time()
+    print('function took {} s'.format( end_time - start_time ) )
+
+
+    sys.exit()
 
     #for peak in range( 0, len(cov_matrix) ):
     # start_time = time.time()
@@ -449,23 +476,25 @@ def main():
     # print(shapes_in_peaks)
     # print(possible_dist)
 
-    print("[NOTE] Fitting Model")
+    num_peaks = 46
 
-    pool2 = multiprocessing.Pool(number_of_threads)
-    start_time = time.time()
-    for peak in range(0, num_peaks):
-
-        print(peak)
-
-        pool2.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-                                              num_padding, deconvolution_dict, shapes_in_peaks))
-
-    pool2.close()
-    pool2.join()
-
-    end_time = time.time()
-    print('function took {} s'.format( end_time - start_time ) )
+    # print("[NOTE] Fitting Model")
+    #
+    # pool2 = multiprocessing.Pool(number_of_threads)
+    # start_time = time.time()
+    # for peak in range(0, num_peaks):
+    #
+    #     print(peak)
+    #
+    #     pool2.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
+    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
+    #                                           num_padding, deconvolution_dict, shapes_in_peaks))
+    #
+    # pool2.close()
+    # pool2.join()
+    #
+    # end_time = time.time()
+    # print('function took {} s'.format( end_time - start_time ) )
 
     print("[NOTE] Generate Output")
 
@@ -514,7 +543,7 @@ def main():
         peaks_found = deconvolution_dict[peak][0]
         found_local_minima = deconvolution_dict[peak][1]
         spec = deconvolution_dict[peak][2]
-        peaks_in_profile = deconvolution_dict[peak][3]
+        sigma_of_peaks = deconvolution_dict[peak][3]
         components = deconvolution_dict[peak][4]
 
         new_start = start - int(num_padding/2)
@@ -522,10 +551,10 @@ def main():
         real_coordinates_list = numpy.array([x for x in range(new_start, new_end)])
 
         # Check number of potential local maxima
-        if( len(peaks_found) != 0 ):
+        if( len(peaks_found) > 1 ):
 
             # Get new peaks
-            num_deconvoluted_peaks = len(peaks_in_profile[0])
+            num_deconvoluted_peaks = len(peaks_found)
 
             peak_start_list = [start] * num_deconvoluted_peaks
             peak_end_list = [end] * num_deconvoluted_peaks
@@ -534,40 +563,34 @@ def main():
             rectangle_start_list = [-1] * num_deconvoluted_peaks
             rectangle_end_list = [-1] * num_deconvoluted_peaks
 
-            if (num_deconvoluted_peaks > 1):
-                for i in range(0, num_deconvoluted_peaks):
-                    peak_center = int(peaks_in_profile[0][i])
-                    peak_center_list[i] = real_coordinates_list[peak_center]
-                    peak_sigma = peaks_in_profile[1][i]
+            for i in range(0, num_deconvoluted_peaks):
+                peak_center = int(peaks_found[i])
+                peak_center_list[i] = real_coordinates_list[peak_center]
+                peak_sigma = sigma_of_peaks[i]
 
-                    # Change Coordinates
-                    left_right_extension = numpy.floor((peak_sigma * args.std))
+                # Change Coordinates
+                left_right_extension = numpy.floor((peak_sigma * args.std))
 
-                    peak_start_list[i] = real_coordinates_list[peak_center] - left_right_extension
-                    peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1
-                    # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
+                peak_start_list[i] = real_coordinates_list[peak_center] - left_right_extension
+                peak_end_list[i] = real_coordinates_list[peak_center] + left_right_extension + 1
+                # end+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
 
-                    rectangle_start_list[i] = peak_center - left_right_extension
-                    rectangle_end_list[i] = peak_center + left_right_extension
+                rectangle_start_list[i] = peak_center - left_right_extension
+                rectangle_end_list[i] = peak_center + left_right_extension
 
-                    if ( peak_start_list[i] < 0 ):
-                        peak_start_list[i] = 0
+                if ( peak_start_list[i] < 0 ):
+                    peak_start_list[i] = 0
 
-                    if ( peak_end_list[i] > chr_sizes_dict[chr] ):
-                       peak_end_list[i] = chr_sizes_dict[chr]
+                if ( peak_end_list[i] > chr_sizes_dict[chr] ):
+                   peak_end_list[i] = chr_sizes_dict[chr]
 
-                    # Write Output tables
-                    # Check number of potential found peaks
-                    output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, peak_center_list[i], id + "_" + str(i),
-                                                                                        score, strand))
-                    output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, peak_start_list[i], peak_end_list[i],
-                                                                                         id + "_" + str(i), score, strand))
-                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
-            else:
-                output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
-                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, start, end, id, score, strand))
-                summit = real_coordinates_list[numpy.argmax(pre_y)]
-                output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
+                # Write Output tables
+                # Check number of potential found peaks
+                output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, peak_center_list[i], id + "_" + str(i),
+                                                                                    score, strand))
+                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, peak_start_list[i], peak_end_list[i],
+                                                                                     id + "_" + str(i), score, strand))
+            output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
 
             # Plot Area
             if (len(peaks_found) > 1 and plot_counter <= 10):

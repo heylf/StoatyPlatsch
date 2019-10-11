@@ -3,7 +3,7 @@ import numpy
 from scipy import signal
 
 ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                     'SkewedVoigtModel', 'DonaichModel', 'RectangleModel', 'StepModel']
+                     'SkewedVoigtModel', 'DonaichModel', 'StepModel']
 
 def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, distance, std, **kwargs):
     x = spec['x']
@@ -101,6 +101,8 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
                 'amplitude': y[peak_indicie],
                 #'sigma': x_range / len(x) * numpy.min(peak_widths),
                 'sigma': std_dict[peak_indicie], #numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
+                #'sigma1': std_dict[peak_indicie]/2, # for RectangleModel
+                #'sigma2': std_dict[peak_indicie]/2, # for RectangleModel
                 'center': x[peak_indicie],
                 'width': width_dict[peak_indicie]
             }

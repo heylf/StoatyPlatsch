@@ -3,7 +3,7 @@ import numpy
 from lmfit import models
 
 ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                     'SkewedVoigtModel', 'DonaichModel', 'RectangleModel', 'StepModel']
+                     'SkewedVoigtModel', 'DonaichModel', 'StepModel']
 
 def generate_model(spec, min_peak_width, max_peak_width):
     composite_model = None
@@ -19,6 +19,8 @@ def generate_model(spec, min_peak_width, max_peak_width):
             # model.set_param_hint('height', min=1e-6, max=1.1*y_max)
             # model.set_param_hint('amplitude', min=1e-6)
             model.set_param_hint('sigma', min=min_peak_width, max=max_peak_width)
+            #model.set_param_hint('sigma1', min=min_peak_width, max=max_peak_width) # For Rectangle Model
+            #model.set_param_hint('sigma2', min=min_peak_width, max=max_peak_width) # For Rectangle Model
             model.set_param_hint('center', vary=False)
             model.set_param_hint('height', min=1e-6, max=1.1*y_max)
             model.set_param_hint('amplitude', min=1e-6, max=y_max)
