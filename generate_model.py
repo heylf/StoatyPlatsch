@@ -2,8 +2,7 @@ import numpy
 
 from lmfit import models
 
-ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                     'SkewedVoigtModel', 'DonaichModel', 'StepModel']
+ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel', 'SkewedVoigtModel', 'DonaichModel']
 
 def generate_model(spec, min_peak_width, max_peak_width):
     composite_model = None
@@ -13,17 +12,11 @@ def generate_model(spec, min_peak_width, max_peak_width):
     for i, basis_func in enumerate(spec['model']):
         prefix = f'm{i}_'
         model = getattr(models, basis_func['type'])(prefix=prefix)
-        if basis_func['type'] in ALL_POSSIBLE_DIST: # for now VoigtModel has gamma constrained to sigma
-            # model.set_param_hint('sigma', min=1e-6, max=x_range-num_padding)
-            # model.set_param_hint('center', min=x_min, max=x_max)
-            # model.set_param_hint('height', min=1e-6, max=1.1*y_max)
-            # model.set_param_hint('amplitude', min=1e-6)
+        if basis_func['type'] in ALL_POSSIBLE_DIST:
             model.set_param_hint('sigma', min=min_peak_width, max=max_peak_width)
-            #model.set_param_hint('sigma1', min=min_peak_width, max=max_peak_width) # For Rectangle Model
-            #model.set_param_hint('sigma2', min=min_peak_width, max=max_peak_width) # For Rectangle Model
             model.set_param_hint('center', vary=False)
             model.set_param_hint('height', min=1e-6, max=1.1*y_max)
-            model.set_param_hint('amplitude', min=1e-6, max=y_max)
+            model.set_param_hint('amplitude', min=1e-6, max=1.1*y_max)
         else:
             raise NotImplemented(f'model {basis_func["type"]} not implemented yet')
         model_params = model.make_params(**basis_func.get('params', {}))

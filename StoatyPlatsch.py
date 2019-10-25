@@ -8,15 +8,16 @@ import os
 import numpy
 import sys
 import multiprocessing
-
 import time
 
-from update_spec import update_spec_from_peaks
-from generate_model import generate_model
 from rainbow_colors import color_linear_gradient
+from deconvolution import deconvolution
+from deconvolution_parallel import deconvolution_parallel
 
 font = {'family' : 'serif'}
 matplotlib.rc('font', **font)
+
+POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel', 'SkewedVoigtModel', 'DonaichModel']
 
 ##############
 ##   FUNC   ##
@@ -28,104 +29,6 @@ def get_line_count(file):
     for line in file:
         count += 1
     return count
-
-def deconvolution(output_folder, peak, cov_matrix, peak_model, max_peaks, min_width, max_width, min_height,
-                  distance, possible_dist, num_padding, deconvolution_dict, shapes_in_peaks):
-
-    # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
-    pre_x = numpy.array([x for x in range(0, len(cov_matrix[peak]))])
-    pre_y = cov_matrix[peak]
-
-    # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
-    x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
-    y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
-
-    models_dict_array = [{'type': peak_model} for i in range(0, max_peaks)]
-
-    spec = {
-        'x': x,
-        'y': y,
-        'model': models_dict_array
-    }
-
-    peaks_indices_array = [i for i in range(0, max_peaks)]
-
-    # Peak Detection Plot
-    list_of_update_spec_from_peaks = update_spec_from_peaks(output_folder, spec, peaks_indices_array,
-                                                            minimal_height=min_height, distance=distance, std=2)
-    peaks_found = list_of_update_spec_from_peaks[0]
-    found_local_minima = list_of_update_spec_from_peaks[1]
-
-    # Check number of potential local maxima
-    if (len(peaks_found) > 1):
-
-        # Check for distributions to be deleted
-        dist_index = 0
-        while dist_index < len(spec['model']):
-            if 'params' not in spec['model'][dist_index]:
-                del spec['model'][dist_index]
-            else:
-                dist_index += 1
-
-        # Fitting Plot
-        dist_not_to_ckeck = ""
-        for m in spec['model']:
-
-            bic_dict = dict()
-
-            for d in possible_dist:
-                if (d != dist_not_to_ckeck):
-                    m['type'] = d
-                    print(d)
-                    model, params = generate_model(spec, min_width, max_width)
-                    try:
-                        output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-                        bic_dict[d] = output.bic
-                    except:
-                        print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
-                        bic_dict[d] = 1000000
-
-            m['type'] = min(bic_dict, key=bic_dict.get)
-            dist_not_to_ckeck = peak_model
-            shapes_in_peaks.append(m['type'])
-
-        model, params = generate_model(spec, min_peak_width=min_width, max_peak_width=max_width)
-
-        output = None
-        optimizer_counter = 0
-        while output is None and optimizer_counter != 10:
-            try:
-                output = model.fit(spec['y'], params, x=spec['x'], nan_policy='raise')
-            except:
-                print("[ERROR 2] Fitting Problem. Model will be discarded and newly optimized.")
-                optimizer_counter += 1
-                pass
-
-        if ( optimizer_counter == 10 ):
-            sys.exit("[FATAL ERROR 1] Optimization problem occured. Try to change hyperparameters.")
-
-        print(spec)
-        print(output.best_values)
-
-        sigma_of_peaks = []
-        best_values=output.best_values
-        for i, model in enumerate(spec['model']):
-            sigma_key = f'm{i}_' + "sigma"
-            if ( sigma_key in best_values ):
-                sigma_of_peaks.append(best_values[f'm{i}_' + "sigma"])
-            else:
-                sigma_of_peaks.append((best_values[f'm{i}_' + "sigma1"] + best_values[f'm{i}_' + "sigma2"])/2)
-
-        #sigma_of_peaks = get_best_values(spec, output)[1]
-        components = output.eval_components(x=x)
-
-        print("yes")
-        print(peak)
-        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, sigma_of_peaks, components]
-    else:
-        print("no")
-        print(peak)
-        deconvolution_dict[peak] = [peaks_found, found_local_minima, spec, None, None]
 
 def main():
 
@@ -190,26 +93,26 @@ def main():
     parser.add_argument(
         "--min_width",
         metavar='int',
-        default=1,
+        default=3,
         help="The parameter defines how many peak the tool will find inside the profile. "
              "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: 5]")
     parser.add_argument(
         "--max_width",
         metavar='int',
-        default=5,
+        default=10,
         help="The parameter defines how many peak the tool will find inside the profile. "
              "It defines the distance each peak must be apart. Increasing it might decrease the number (underfit). [Default: 10]")
     parser.add_argument(
         "--min_height",
         metavar='int',
-        default=5,
+        default=10,
         help="In order to find peaks in the profile, the tool searches for local maxima. Increasing the minimal"
              "height will decrease the number of peaks (the number of local maxima). It is the minimal amount"
              "of required reads (events) to be considered. [Default: 5]")
     parser.add_argument(
         "--distance",
         metavar='int',
-        default=2,
+        default=5,
         help="It is the minimal required distance each local maxima have to be apart. Decreasing the parameter"
              "will result in overfitting (more peaks). [Default: 10]")
     parser.add_argument(
@@ -217,7 +120,27 @@ def main():
         metavar='int',
         default=2,
         help="This parameter defines the width of the newly defined peak binding sites. It is the number of standard"
-             "deviations of the undelying modelled distribution.")
+             "deviations of the undelying modelled distribution. [Default: 2]")
+    parser.add_argument(
+        "--min_profile_length",
+        metavar='int',
+        default=20,
+        help="This parameter defines the minimal length of the profile to take it "
+             "into considaration for a deconvolution. [Default: 20]")
+    parser.add_argument(
+        "--max_summits",
+        metavar='int',
+        default=30,
+        help="This parameter defines the maximal number of summits in a profile. The tool takes much longer "
+             "if you increase it. Profiles with more summits will be filtered out (> max_summits). It is recommended to change"
+             "the parameters for those profiles or check the length of the profiles. It is worth to preprocess them again or "
+             "check the peak calling algorithm and the parameters of the peak caller."
+             "[Default: 30]")
+    parser.add_argument(
+        "-t", "--threads",
+        metavar='int',
+        default=1,
+        help="Number of threads for parallelization. [Default: 1]")
 
     ######################
     ##   CHECKS INPUT   ##
@@ -236,6 +159,8 @@ def main():
 
     #TODO Check for correct distribution models
 
+    #TODO include a forcing to use a specific model
+
     #######################
     ##   PREPROCESSING   ##
     #######################
@@ -247,17 +172,19 @@ def main():
 
     extended_peak_file_name = "{}/peaks_extended.bed".format(args.output_folder)
 
-    # Find maximal peak length and get the number of peaks from the peak file.
+    # Get peak lengths and get the number of peaks from the peak file.
     peaks_file = open(args.input_bed, "r")
     max_peak_len = 0
     num_peaks = 0
     data_dict = {}
+    peak_length_dict = {}
     for line in peaks_file:
         data = line.strip("\n").split("\t")
         data_dict[num_peaks] = data
         start = data[1]
         end = data[2]
         length = int(end) - int(start)
+        peak_length_dict[num_peaks] = length
 
         if (length > max_peak_len):
             max_peak_len = length
@@ -283,7 +210,6 @@ def main():
     print("[NOTE] Maximal peak length {}.".format(max_peak_len))
 
     # Extend the peaks to the maximal length if the parameter is set to true.
-    bool_length_norm = 0
     if ( args.length_norm ):
 
         print("[NOTE] Activate length normalization.")
@@ -360,7 +286,6 @@ def main():
 
     else:
         extended_peak_file_name = args.input_bed
-        bool_length_norm = 1
 
     # Generate Coverage file with bedtools
     coverage_file_name = "{}/{}_coverage.tsv".format(args.output_folder, outfilename)
@@ -413,8 +338,9 @@ def main():
     ## Start Deconvolution ###
     ##########################
 
-    number_of_threads = 4
+    number_of_threads = int(args.threads)
 
+    print("[NOTE] Using " + str(number_of_threads) + " threads")
     print("[NOTE] Start Deconvolution")
 
     # Read in extended peak file of the coverage calculation for peak meta data.
@@ -426,75 +352,58 @@ def main():
         counter_peaks += 1
     for_data_peaks_file.close()
 
-    # estimated_dists = [args.peak_model]
-    # number_of_peaks_for_estimation = 5
-    # estimation_count = 0
-
-    pool = multiprocessing.Pool(number_of_threads)
     manager = multiprocessing.Manager()
     deconvolution_dict = manager.dict()
-    shapes_in_peaks = manager.list()
-    possible_dist = manager.list(['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                                  'SkewedVoigtModel', 'DonaichModel', 'StepModel'])
 
     # Padding with zero makes sure I will not screw up the fitting. Sometimes if a peak is too close to the border
     # The Gaussian is too big to be fitted and a very borad Guassian will matched to the data.
     num_padding = 40
 
+    # for peak in range(145, 146):
+    #
+    #     if ( peak_length_dict[peak] > 20 ):
+    #         start_time = time.time()
+    #         deconvolution(args.output_folder, peak, cov_matrix[peak], args.peak_model, args.max_peaks,
+    #                                               args.min_width, args.max_width, args.min_height, args.distance,
+    #                                               num_padding, deconvolution_dict)
+    #         end_time = time.time()
+    #
+    #         print('function took {} s'.format(end_time - start_time))
+    #
+    #         if ( (end_time - start_time) > 10 ):
+    #             print('function took {} s'.format( end_time - start_time ) )
+    #             print(peak)
+    #             print(peak_length_dict[peak])
+    #             print(data_dict[peak])
+    # sys.exit()
+
+    print("[NOTE] Fitting Model")
     start_time = time.time()
-    for peak in range(0, 65):
 
-        print(peak)
+    # First deconvolute all profiles with less than 10 summits in parallel.
+    pool = multiprocessing.Pool(number_of_threads)
+    for peak in range(0, num_peaks):
 
-        deconvolution(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-                                              args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-                                              num_padding, deconvolution_dict, shapes_in_peaks)
+        if ( peak_length_dict[peak] > args.min_profile_length ):
+            print(peak)
+            pool.apply_async(deconvolution, args=(peak, cov_matrix[peak], args.peak_model, args.max_peaks,
+                                                  args.min_width, args.max_width, args.min_height, args.distance,
+                                                  num_padding, deconvolution_dict))
+    pool.close()
+    pool.join()
+
+    # Then deconvoltue profiles with more than 10 summits in serial but the convolution is in parallel.
+    # This will increase speed, because the deconvolution has a exponential runtime (30 summit ~ 2-5 minutes).
+    for peak in range(0, num_peaks):
+
+        if ( peak_length_dict[peak] > args.min_profile_length and peak not in deconvolution_dict):
+            print(peak)
+            deconvolution_parallel(peak, cov_matrix[peak], args.peak_model, args.max_peaks,
+                                   args.min_width, args.max_width, args.min_height, args.distance,
+                                   num_padding, deconvolution_dict, number_of_threads, args.max_summits)
 
     end_time = time.time()
     print('function took {} s'.format( end_time - start_time ) )
-
-
-    sys.exit()
-
-    #for peak in range( 0, len(cov_matrix) ):
-    # start_time = time.time()
-    # for peak in range(0, 10):
-    #
-    #     print(peak)
-    #
-    #     pool.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-    #                                           num_padding, deconvolution_dict, shapes_in_peaks))
-    #
-    # pool.close()
-    # pool.join()
-    #
-    # end_time = time.time()
-    # print('function took {} s'.format( end_time - start_time ) )
-    #
-    # possible_dist = list(set(shapes_in_peaks))
-    # print(shapes_in_peaks)
-    # print(possible_dist)
-
-    num_peaks = 46
-
-    # print("[NOTE] Fitting Model")
-    #
-    # pool2 = multiprocessing.Pool(number_of_threads)
-    # start_time = time.time()
-    # for peak in range(0, num_peaks):
-    #
-    #     print(peak)
-    #
-    #     pool2.apply_async(deconvolution, args=(args.output_folder, peak, cov_matrix, args.peak_model, args.max_peaks,
-    #                                           args.min_width, args.max_width, args.min_height, args.distance, possible_dist,
-    #                                           num_padding, deconvolution_dict, shapes_in_peaks))
-    #
-    # pool2.close()
-    # pool2.join()
-    #
-    # end_time = time.time()
-    # print('function took {} s'.format( end_time - start_time ) )
 
     print("[NOTE] Generate Output")
 
@@ -532,26 +441,19 @@ def main():
         y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
         inv_y = y * -1
 
-        #y = cov_matrix[9]
-        #y = cov_matrix[15]
-        #y = cov_matrix[21]
-        #y = cov_matrix[18]
-        #y = cov_matrix[47]
-        #y = cov_matrix[50]
-
-        # Get new peaks
-        peaks_found = deconvolution_dict[peak][0]
-        found_local_minima = deconvolution_dict[peak][1]
-        spec = deconvolution_dict[peak][2]
-        sigma_of_peaks = deconvolution_dict[peak][3]
-        components = deconvolution_dict[peak][4]
-
-        new_start = start - int(num_padding/2)
-        new_end = end + int(num_padding/2)
+        new_start = start - int(num_padding / 2)
+        new_end = end + int(num_padding / 2)
         real_coordinates_list = numpy.array([x for x in range(new_start, new_end)])
 
         # Check number of potential local maxima
-        if( len(peaks_found) > 1 ):
+        if (peak in deconvolution_dict):
+
+            # Get new peaks
+            peaks_found = deconvolution_dict[peak][0]
+            found_local_minima = deconvolution_dict[peak][1]
+            spec = deconvolution_dict[peak][2]
+            sigma_of_peaks = deconvolution_dict[peak][3]
+            components = deconvolution_dict[peak][4]
 
             # Get new peaks
             num_deconvoluted_peaks = len(peaks_found)
@@ -598,17 +500,8 @@ def main():
                 ax.plot(pre_x, pre_y)
                 ax.set_xlabel('Relative Nucleotide Position')
                 ax.set_ylabel('Intensity')
-                ax.axes.get_xaxis().set_ticks([])
+                #ax.axes.get_xaxis().set_ticks([])
 
-                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
-                ax2.plot(x, y)
-                ax2.plot(x, inv_y)
-                ax2.plot(peaks_found, y[peaks_found], "o", markersize=2)
-                ax2.plot(found_local_minima, inv_y[found_local_minima], "x", markersize=2)
-                ax2.set_xlabel('Relative Nucleotide Position')
-                ax2.set_ylabel('Intensity')
-
-                # Deconvolution Plot
                 # get maximum value of components
                 max_fitted_y = 0
                 for i, model in enumerate(spec['model']):
@@ -619,6 +512,16 @@ def main():
                 if (max_fitted_y < max(y)):
                     max_y_plot = max(y)
 
+                ax2 = fig_extremas.add_subplot(2, 5, plot_counter)
+                ax2.plot(x, y)
+                ax2.plot(x, inv_y)
+                ax2.plot(peaks_found, y[peaks_found], "o", markersize=2)
+                ax2.plot(found_local_minima, inv_y[found_local_minima], "x", markersize=2)
+                ax2.set_xlabel('Relative Nucleotide Position')
+                ax2.set_ylabel('Intensity')
+                ax2.set_ylim([min(inv_y), max_y_plot])
+
+                # Deconvolution Plot
                 c = color_linear_gradient(start_hex="#FF0000", finish_hex="#0000ff", n=num_deconvoluted_peaks)['hex']
                 ax3 = fig_deconvolution.add_subplot(2, 5, plot_counter)
                 # Add rectangles
@@ -632,7 +535,7 @@ def main():
                 ax3.set_xlabel('Relative Nucleotide Position')
                 ax3.set_ylabel('Intensity')
                 ax3.set_ylim([0, max_y_plot])
-                ax3.axes.get_xaxis().set_ticks([])
+                #ax3.axes.get_xaxis().set_ticks([])
 
                 plot_counter += 1
         else:

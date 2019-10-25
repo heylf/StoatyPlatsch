@@ -2,15 +2,23 @@ import numpy
 
 from scipy import signal
 
-ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel',
-                     'SkewedVoigtModel', 'DonaichModel', 'StepModel']
+ALL_POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel', 'SkewedVoigtModel', 'DonaichModel']
 
-def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, distance, std, **kwargs):
+def update_spec_from_peaks(spec, model_indicies, minimal_height, distance, std, localheight, **kwargs):
     x = spec['x']
     y = spec['y']
 
+    minimal_height_new = 0
+    if ( localheight ):
+        minimal_height_new = int(0.1 * max(y))
+    else:
+        minimal_height_new = minimal_height
+
+    if ( minimal_height_new < minimal_height ):
+        minimal_height_new = minimal_height
+
     # Find maxima and minima threshold=[None, 100],
-    found_local_maximas = signal.find_peaks(y, distance = distance, height=[minimal_height, max(y)])
+    found_local_maximas = signal.find_peaks(y, distance = distance, height=[minimal_height_new, max(y)])
 
     # inverse data for local minima
     inv_y = y * -1
@@ -99,8 +107,7 @@ def update_spec_from_peaks(outputfolder, spec, model_indicies, minimal_height, d
             params = {
                 'height': y[peak_indicie],
                 'amplitude': y[peak_indicie],
-                #'sigma': x_range / len(x) * numpy.min(peak_widths),
-                'sigma': std_dict[peak_indicie], #numpy.ceil((numpy.std(y)/len(y))*2),#x_range / len(x) * 5,
+                'sigma': std_dict[peak_indicie],
                 #'sigma1': std_dict[peak_indicie]/2, # for RectangleModel
                 #'sigma2': std_dict[peak_indicie]/2, # for RectangleModel
                 'center': x[peak_indicie],
