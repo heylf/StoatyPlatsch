@@ -13,7 +13,7 @@ def model_fit_paralell(m, spec, min_width, max_width, bic_dict, d):
     output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
     bic_dict[d] = output.bic
 
-def deconvolution_parallel(peak, pre_y, peak_model, max_peaks, min_width, max_width, min_height, distance, num_padding,
+def deconvolution_parallel(peak, pre_y, peak_model, min_width, max_width, min_height, distance, num_padding,
                            deconvolution_dict, number_of_threads, max_summits):
 
     # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
@@ -23,7 +23,10 @@ def deconvolution_parallel(peak, pre_y, peak_model, max_peaks, min_width, max_wi
     x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
     y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
 
-    models_dict_array = [{'type': peak_model} for i in range(0, max_peaks)]
+    models_dict_array = [{'type': 'GaussianModel'} for i in range(0, 100)]
+
+    if ( peak_model != "None" ):
+        models_dict_array = [{'type': peak_model} for i in range(0, 100)]
 
     spec = {
         'x': x,
@@ -31,7 +34,7 @@ def deconvolution_parallel(peak, pre_y, peak_model, max_peaks, min_width, max_wi
         'model': models_dict_array
     }
 
-    peaks_indices_array = [i for i in range(0, max_peaks)]
+    peaks_indices_array = [i for i in range(0, 100)]
 
     # Peak Detection Plot
     list_of_update_spec_from_peaks = update_spec_from_peaks(spec, peaks_indices_array, minimal_height=min_height,
@@ -51,25 +54,26 @@ def deconvolution_parallel(peak, pre_y, peak_model, max_peaks, min_width, max_wi
                 dist_index += 1
 
         # Fitting Plot
-        for m in spec['model']:
+        if (peak_model == "None"):
+            for m in spec['model']:
 
-            manager = multiprocessing.Manager()
-            bic_dict = manager.dict()
+                manager = multiprocessing.Manager()
+                bic_dict = manager.dict()
 
-            pool = multiprocessing.Pool(number_of_threads)
+                pool = multiprocessing.Pool(number_of_threads)
 
-            for d in POSSIBLE_DIST:
-                #print(d)
-                try:
-                    pool.apply_async(model_fit_paralell, args=(m, spec, min_width, max_width, bic_dict, d))
-                except:
-                    print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
-                    bic_dict[d] = 1000000
+                for d in POSSIBLE_DIST:
+                    #print(d)
+                    try:
+                        pool.apply_async(model_fit_paralell, args=(m, spec, min_width, max_width, bic_dict, d))
+                    except:
+                        print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
+                        bic_dict[d] = 1000000
 
-            pool.close()
-            pool.join()
+                pool.close()
+                pool.join()
 
-            m['type'] = min(bic_dict, key=bic_dict.get)
+                m['type'] = min(bic_dict, key=bic_dict.get)
 
         model, params = generate_model(spec, min_peak_width=min_width, max_peak_width=max_width)
 

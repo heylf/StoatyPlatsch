@@ -6,7 +6,7 @@ from generate_model import generate_model
 
 POSSIBLE_DIST = ['GaussianModel', 'LorentzianModel', 'VoigtModel', 'SkewedGaussianModel', 'SkewedVoigtModel', 'DonaichModel']
 
-def deconvolution(peak, pre_y, peak_model, max_peaks, min_width, max_width, min_height, distance, num_padding, deconvolution_dict):
+def deconvolution(peak, pre_y, peak_model, min_width, max_width, min_height, distance, num_padding, deconvolution_dict):
 
     # without x+1 because genome coordinates starts at zero (end-1, see info bedtools coverage)
     pre_x = numpy.array([x for x in range(0, len(pre_y))])
@@ -15,7 +15,10 @@ def deconvolution(peak, pre_y, peak_model, max_peaks, min_width, max_width, min_
     x = numpy.array([x for x in range(0, len(pre_x) + num_padding)])
     y = numpy.pad(pre_y, (int(num_padding / 2), int(num_padding / 2)), 'constant', constant_values=(0, 0))
 
-    models_dict_array = [{'type': peak_model} for i in range(0, max_peaks)]
+    models_dict_array = [{'type': 'GaussianModel'} for i in range(0, 100)]
+
+    if ( peak_model != "None" ):
+        models_dict_array = [{'type': peak_model} for i in range(0, 100)]
 
     spec = {
         'x': x,
@@ -23,7 +26,7 @@ def deconvolution(peak, pre_y, peak_model, max_peaks, min_width, max_width, min_
         'model': models_dict_array
     }
 
-    peaks_indices_array = [i for i in range(0, max_peaks)]
+    peaks_indices_array = [i for i in range(0, 100)]
 
     # Peak Detection Plot
     list_of_update_spec_from_peaks = update_spec_from_peaks(spec, peaks_indices_array, minimal_height=min_height,
@@ -43,22 +46,23 @@ def deconvolution(peak, pre_y, peak_model, max_peaks, min_width, max_width, min_
                 dist_index += 1
 
         # Fitting Plot
-        for m in spec['model']:
+        if (peak_model == "None"):
+            for m in spec['model']:
 
-            bic_dict = dict()
+                bic_dict = dict()
 
-            for d in POSSIBLE_DIST:
-                m['type'] = d
-                #print(d)
-                model, params = generate_model(spec, min_width, max_width)
-                try:
-                    output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
-                    bic_dict[d] = output.bic
-                except:
-                    print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
-                    bic_dict[d] = 1000000
+                for d in POSSIBLE_DIST:
+                    m['type'] = d
+                    #print(d)
+                    model, params = generate_model(spec, min_width, max_width)
+                    try:
+                        output = model.fit(spec['y'], params, x=spec['x'], nan_policy='propagate')
+                        bic_dict[d] = output.bic
+                    except:
+                        print("[ERROR 1] Fitting Problem. Model will be discarded and newly optimized.")
+                        bic_dict[d] = 1000000
 
-            m['type'] = min(bic_dict, key=bic_dict.get)
+                m['type'] = min(bic_dict, key=bic_dict.get)
 
         model, params = generate_model(spec, min_peak_width=min_width, max_peak_width=max_width)
 

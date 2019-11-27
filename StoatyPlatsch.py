@@ -81,21 +81,16 @@ def main():
         metavar='int',
         help="Set length normalization value (maximum peak length).")
     parser.add_argument(
-        "--max_peaks",
-        metavar='int',
-        default=100,
-        help="Maximal number of possible peaks in a peak profile. [Default: 100]")
-    parser.add_argument(
         "--peak_model",
         metavar='str',
-        default="GaussianModel",
-        help="Type of model for the peaks. Either GaussianModel, LorentzianModel, or VoigtModel. [Default: GaussianModel]")
+        default="None",
+        help="Type of model for the peaks. Either GaussianModel, LorentzianModel, or VoigtModel. [Default: None]")
     parser.add_argument(
         "--min_width",
         metavar='int',
         default=3,
         help="The parameter defines how many peak the tool will find inside the profile. "
-             "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: 5]")
+             "It defines the distance each peak must be apart. Reducing it might increase the number (overfit). [Default: 3]")
     parser.add_argument(
         "--max_width",
         metavar='int',
@@ -108,13 +103,13 @@ def main():
         default=10,
         help="In order to find peaks in the profile, the tool searches for local maxima. Increasing the minimal"
              "height will decrease the number of peaks (the number of local maxima). It is the minimal amount"
-             "of required reads (events) to be considered. [Default: 5]")
+             "of required reads (events) to be considered. [Default: 10]")
     parser.add_argument(
         "--distance",
         metavar='int',
         default=5,
         help="It is the minimal required distance each local maxima have to be apart. Decreasing the parameter"
-             "will result in overfitting (more peaks). [Default: 10]")
+             "will result in overfitting (more peaks). [Default: 5]")
     parser.add_argument(
         "--std",
         metavar='int',
@@ -157,7 +152,9 @@ def main():
         sys.exit("[ERROR] Peakfile has to be in bed6 format!")
     bedfile.close()
 
-    #TODO Check for correct distribution models
+    if ( args.peak_model != "None" and args.peak_model not in POSSIBLE_DIST ):
+        sys.exit("[ERROR] Peakmodel not supported.")
+
 
     #TODO include a forcing to use a specific model
 
@@ -386,7 +383,7 @@ def main():
 
         if ( peak_length_dict[peak] > args.min_profile_length ):
             print(peak)
-            pool.apply_async(deconvolution, args=(peak, cov_matrix[peak], args.peak_model, args.max_peaks,
+            pool.apply_async(deconvolution, args=(peak, cov_matrix[peak], args.peak_model,
                                                   args.min_width, args.max_width, args.min_height, args.distance,
                                                   num_padding, deconvolution_dict))
     pool.close()
@@ -398,7 +395,7 @@ def main():
 
         if ( peak_length_dict[peak] > args.min_profile_length and peak not in deconvolution_dict):
             print(peak)
-            deconvolution_parallel(peak, cov_matrix[peak], args.peak_model, args.max_peaks,
+            deconvolution_parallel(peak, cov_matrix[peak], args.peak_model,
                                    args.min_width, args.max_width, args.min_height, args.distance,
                                    num_padding, deconvolution_dict, number_of_threads, args.max_summits)
 
@@ -488,9 +485,9 @@ def main():
 
                 # Write Output tables
                 # Check number of potential found peaks
-                output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, peak_center_list[i], id + "_" + str(i),
+                output_table_summits.write("{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n".format(chr, int(peak_center_list[i]), id + "_" + str(i),
                                                                                     score, strand))
-                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, peak_start_list[i], peak_end_list[i],
+                output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, int(peak_start_list[i]), int(peak_end_list[i]),
                                                                                      id + "_" + str(i), score, strand))
             output_table_overview.write("{0}\t{1}\t{2}\n".format(id, len(peak_center_list), peak_center_list))
 
@@ -540,9 +537,9 @@ def main():
                 plot_counter += 1
         else:
             output_table_overview.write("{0}\t{1}\t{2}\n".format(id, "1", start))
-            output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, start, end, id, score, strand))
+            output_table_new_peaks.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, int(start), int(end), id, score, strand))
             summit = real_coordinates_list[numpy.argmax(pre_y)]
-            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, summit, summit, id, score, strand))
+            output_table_summits.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(chr, int(summit), int(summit), id, score, strand))
 
     fig_profile.savefig('{}/profile.pdf'.format(args.output_folder), bbox_inches='tight')
     fig_extremas.savefig('{}/profile_peaks.pdf'.format(args.output_folder), bbox_inches='tight')
