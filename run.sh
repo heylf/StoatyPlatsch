@@ -8,9 +8,11 @@
 
 source activate stoatyplatsch
 python3 StoatyPlatsch.py \
--a peaks_for_deconvolution.bed \
--b RBFOX2_rep1_sorted_truncation_sites.bed \
--c hg38.chrom.sizes.txt \
+-a "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2/peaks_for_deconvolution.bed" \
+-b "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2/RBFOX2_sorted_truncation_sites.bed" \
+-c "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2/hg38.chrom.sizes.txt" \
 -t 20 \
--o test_data
+--gene_file "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2/Homo_sapiens.GRCh38.98.genes.bed" \
+--exon_file "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2/Homo_sapiens.GRCh38.98.collapsed.exons.bed" \
+-o "/scratch/bi03/heylf/StoatyPlatsch/data_RBFOX2"
 source deactivate stoatyplatsch

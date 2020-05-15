@@ -37,7 +37,7 @@ def main():
     ####################
 
     tool_description = """
-
+    
     """
 
     # parse command line arguments
@@ -136,6 +136,20 @@ def main():
         metavar='int',
         default=1,
         help="Number of threads for parallelization. [Default: 1]")
+
+    # optional files (annotations)
+    parser.add_argument(
+        "--gene_file",
+        metavar='*.bed',
+        help="Path to the gene annotation file.")
+    parser.add_argument(
+        "--exon_file",
+        metavar='*.bed',
+        help="Path to the exon boundary file.")
+    parser.add_argument(
+        "--interval_file",
+        metavar='*.bed',
+        help="Path to an additional interval file.")
 
     ######################
     ##   CHECKS INPUT   ##
@@ -406,7 +420,9 @@ def main():
 
     output_table_overview = open('{}/final_tab_overview.tsv'.format(args.output_folder), "w")
     output_table_summits = open('{}/final_tab_summits.bed'.format(args.output_folder), "w")
-    output_table_new_peaks = open('{}/final_tab_all_peaks.bed'.format(args.output_folder), "w")
+
+    output_table_new_peaks_names = '{}/final_tab_all_peaks.bed'.format(args.output_folder)
+    output_table_new_peaks = open(output_table_new_peaks_names, "w")
 
     fig_profile = plt.figure(figsize=(20, 4), dpi=80)
     fig_extremas = plt.figure(figsize=(20, 4), dpi=80)
@@ -548,6 +564,63 @@ def main():
     output_table_overview.close()
     output_table_summits.close()
     output_table_new_peaks.close()
+
+    ##########################
+    ##   READ ANNOTATIONS   ##
+    ##########################
+
+    print("[NOTE] Refined peaks with annotation.")
+
+    output_table_new_peaks_annotation_refined = '{}/final_tab_all_peaks_annotation_refined.bed'.format(args.output_folder)
+
+    # Gene Annotation
+    if ( args.gene_file ):
+        print("[NOTE] Use gene annotation.")
+        annotation_file = open(args.gene_file, "r")
+        firstline = annotation_file.readline()
+        if (len(firstline.strip("\n").split("\t")) < 6):
+            sys.exit("[ERROR] Peakfile has to be in bed6 format!")
+
+        tmp_1 = '{}/tmp_1.bed'.format(args.output_folder)
+        tmp_2 = '{}/tmp_2.bed'.format(args.output_folder)
+
+        sb.Popen("bedtools intersect -s -a {} -b {} > {}".format(output_table_new_peaks_names, args.gene_file, tmp_1), shell=True).wait()
+        sb.Popen("bedtools intersect -s -v -a {} -b {} > {}".format(output_table_new_peaks_names, args.gene_file, tmp_2), shell=True).wait()
+        sb.Popen("cat {} {} > {}".format(tmp_1, tmp_2, output_table_new_peaks_annotation_refined), shell=True).wait()
+        os.remove(tmp_1)
+        os.remove(tmp_2)
+
+    # Exon Annotation
+    if ( args.exon_file ):
+        print("[NOTE] Use exon annotation.")
+        annotation_file = open(args.exon_file, "r")
+        firstline = annotation_file.readline()
+        if (len(firstline.strip("\n").split("\t")) < 6):
+            sys.exit("[ERROR] Peakfile has to be in bed6 format!")
+
+        tmp_1 = '{}/tmp_1.bed'.format(args.output_folder)
+        tmp_2 = '{}/tmp_2.bed'.format(args.output_folder)
+        sb.Popen("bedtools intersect -s -a {} -b {} > {}".format(output_table_new_peaks_annotation_refined, args.exon_file, tmp_1), shell=True).wait()
+        sb.Popen("bedtools intersect -s -v -a {} -b {} > {}".format(output_table_new_peaks_annotation_refined, args.exon_file, tmp_2), shell=True).wait()
+        sb.Popen("cat {} {} > {}".format(tmp_1, tmp_2, output_table_new_peaks_annotation_refined), shell=True).wait()
+        os.remove(tmp_1)
+        os.remove(tmp_2)
+
+    # Other Annotation
+    if ( args.interval_file ):
+        print("[NOTE] Use alternative annotation.")
+        annotation_file = open(args.interval_file, "r")
+        firstline = annotation_file.readline()
+        if (len(firstline.strip("\n").split("\t")) < 6):
+            sys.exit("[ERROR] Peakfile has to be in bed6 format!")
+
+        tmp_1 = '{}/tmp_1.bed'.format(args.output_folder)
+        tmp_2 = '{}/tmp_2.bed'.format(args.output_folder)
+        sb.Popen("bedtools intersect -s -a {} -b {} > {}".format(output_table_new_peaks_annotation_refined, args.interval_file, tmp_1), shell=True).wait()
+        sb.Popen("bedtools intersect -s -v -a {} -b {} > {}".format(output_table_new_peaks_annotation_refined, args.interval_file, tmp_2), shell=True).wait()
+        sb.Popen("cat {} {} > {}".format(tmp_1, tmp_2, output_table_new_peaks_annotation_refined), shell=True).wait()
+        os.remove(tmp_1)
+        os.remove(tmp_2)
 
     print("[FINISH]")
 
