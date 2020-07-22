@@ -3,6 +3,84 @@ import numpy as np
 
 from .data import Peak
 
+import os
+import pathlib
+import subprocess as sb
+import sys
+
+
+def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
+                         verbose=False):
+    """ Creates the coverage file for the given peak and read file.
+
+    Creates the coverage file for the peaks of the input files. The default
+    behavior is sorting the peak file first and then calculating the coverage
+    by using 'bedtools coverage' with the sorted argument, which reduces the
+    required memory significantly. This behavior can be changed by setting the
+    parameter 'no_sorting' to True.
+
+    Parameters
+    ----------
+    input_bed : str
+        The file path of the peak file in bed6 format, containing the peaks for
+        which the coverage should be calculated.
+    input_bam : str
+        The file path of the read file used for the peak calling in bed or bam
+        format.
+    no_sorting : bool
+        When set to True the coverage is calculated without using the sorted
+        parameter of 'bedtools coverage'.
+    output_path : str
+        The folder path where the coverage file should be saved. Non existing
+        folders will be created.
+
+    Returns
+    -------
+    coverage_file : str
+        The file path of the created coverage file.
+    """
+
+    # Check if peak file is in bed6 format
+    bed_file = open(input_bed, "r")
+    first_line = bed_file.readline()
+    if (len(first_line.strip("\n").split("\t")) < 6):
+        sys.exit("[ERROR] Peak file has to be in bed6 format!")
+    bed_file.close()
+
+    os.makedirs(output_path, exist_ok=True)
+
+    # Generate coverage file with bedtools. If sorting is used, create
+    # intermediate sorted peak file first.
+    coverage_file = os.path.join(
+        output_path,
+        "{}__coverage.tsv".format(pathlib.Path(input_bam).stem)
+        )
+    if no_sorting:
+        cmd_coverage = "bedtools coverage -a {} -b {} -d -s > {}".format(
+            input_bed, input_bam, coverage_file
+            )
+    else:
+        input_bed_sorted = os.path.join(
+            output_path,
+            "{}__sorted.bed".format(pathlib.Path(input_bed).stem)
+            )
+        cmd_sort = "sort -V -k1,1 -k2,2n {} > {}".format(input_bed,
+                                                         input_bed_sorted)
+        if verbose:
+            print("[NOTE]: Create sorted peak file. Cmd: {}".format(cmd_sort))
+        sb.Popen(cmd_sort, shell=True).wait()
+
+        cmd_coverage = \
+            "bedtools coverage -sorted -a {} -b {} -g {} -d -s > {}".format(
+                input_bed_sorted, input_bam, input_bed_sorted, coverage_file
+                )
+
+    if verbose:
+        print("[NOTE]: Create coverage file. Cmd: {}".format(cmd_coverage))
+    sb.Popen(cmd_coverage, shell=True).wait()
+
+    return coverage_file
+
 
 def read_coverage_file(input_coverage_file):
     """ Reads and processes the given coverage file.

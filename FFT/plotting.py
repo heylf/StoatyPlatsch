@@ -51,8 +51,10 @@ def create_profile_plots(peaks, output_path, output_format='svg'):
         fig.legend()
 
         width = len("{}".format(max(peaks)))
-        file_path = '{}/peak__id_{:0{}d}.{}'.format(output_path, p_id, width,
-                                                    output_format)
+        file_path = os.path.join(
+            output_path,
+            'peak__id_{:0{}d}.{}'.format(p_id, width, output_format)
+            )
         fig.savefig(file_path, format=output_format)
 
         plt.close(fig)
