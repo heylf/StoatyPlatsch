@@ -1,7 +1,6 @@
 
 import os
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -21,16 +20,18 @@ def create_profile_plots(peaks, output_path, output_format='svg'):
         matplotlib documentation for supported values.
     """
 
+    if len(peaks) == 0:
+        return
+
     os.makedirs(output_path, exist_ok=True)
 
-    for p in sorted(peaks.keys()):
-        peak = peaks[p]
+    for p_id in sorted(peaks.keys()):
+        peak = peaks[p_id]
 
         fig, ax_rel = plt.subplots()
         ax_rel.plot(np.arange(len(peak.coverage)), peak.coverage,
-                    label='Peak #{}'.format(peak.peak_number),
-                    linewidth=1,
-                    marker='.')
+                    label='{} - Peak #{}'.format(peak.chrom, peak.peak_number),
+                    linewidth=1, marker='.')
         ax_rel.set_xlabel('Relative Nucleotide Position')
         ax_rel.set_ylabel('Intensity')
         for ax in [ax_rel.xaxis, ax_rel.yaxis]:
@@ -49,9 +50,9 @@ def create_profile_plots(peaks, output_path, output_format='svg'):
 
         fig.legend()
 
-        width = len("{}".format(len(peaks)))
-        file_path = '{}/peak_{:0{}d}.{}'.format(output_path, peak.peak_number,
-                                                width, output_format)
+        width = len("{}".format(max(peaks)))
+        file_path = '{}/peak__id_{:0{}d}.{}'.format(output_path, p_id, width,
+                                                    output_format)
         fig.savefig(file_path, format=output_format)
 
         plt.close(fig)
