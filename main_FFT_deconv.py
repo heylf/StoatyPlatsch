@@ -6,8 +6,10 @@ import sys
 import numpy as np
 
 # from FFT.development.development import analyze_FFT, create_FFT_plots
-from FFT.preprocessing import create_coverage_file, read_coverage_file
 from FFT.plotting import create_profile_plots
+from FFT.postprocessing import (create_output_files,
+                                refine_peaks_with_annotations)
+from FFT.preprocessing import create_coverage_file, read_coverage_file
 
 
 if __name__ == '__main__':
@@ -85,6 +87,16 @@ if __name__ == '__main__':
         type=int
         )
 
+    # Optional arguments for annotations
+    parser.add_argument(
+        "--gene_file",
+        metavar='<bed>',
+        help="Path to the gene annotation file.")
+    parser.add_argument(
+        "--exon_file",
+        metavar='<bed>',
+        help="Path to the exon boundary file.")
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -133,6 +145,13 @@ if __name__ == '__main__':
     # analyze_FFT_old(peaks, os.path.join(args.output_folder, 'FFT_tests'))
 
     # analyze_FFT(peaks, os.path.join(args.output_folder, 'FFT_results'))
+
+    _file_path_overview, _file_path_summits, file_path_all_peaks = \
+        create_output_files(peaks, args.output_folder, args.verbose)
+
+    refine_peaks_with_annotations(file_path_all_peaks,
+                                  args.gene_file, args.exon_file,
+                                  args.output_folder, args.verbose)
 
     if args.verbose:
         print("[FINISH]")

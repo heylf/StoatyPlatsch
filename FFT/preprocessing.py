@@ -1,12 +1,12 @@
 
-import numpy as np
-
-from .data import Peak
-
 import os
 import pathlib
 import subprocess as sb
 import sys
+
+import numpy as np
+
+from .data import Peak
 
 
 def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
@@ -33,10 +33,12 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
     output_path : str
         The folder path where the coverage file should be saved. Non existing
         folders will be created.
+    verbose : bool (default: False)
+        Print information to console when set to True.
 
     Returns
     -------
-    coverage_file : str
+    coverage_file_path : str
         The file path of the created coverage file.
     """
 
@@ -51,13 +53,13 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
 
     # Generate coverage file with bedtools. If sorting is used, create
     # intermediate sorted peak file first.
-    coverage_file = os.path.join(
+    coverage_file_path = os.path.join(
         output_path,
         "{}__coverage.tsv".format(pathlib.Path(input_bam).stem)
         )
     if no_sorting:
         cmd_coverage = "bedtools coverage -a {} -b {} -d -s > {}".format(
-            input_bed, input_bam, coverage_file
+            input_bed, input_bam, coverage_file_path
             )
     else:
         input_bed_sorted = os.path.join(
@@ -72,14 +74,15 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
 
         cmd_coverage = \
             "bedtools coverage -sorted -a {} -b {} -g {} -d -s > {}".format(
-                input_bed_sorted, input_bam, input_bed_sorted, coverage_file
+                input_bed_sorted, input_bam, input_bed_sorted,
+                coverage_file_path
                 )
 
     if verbose:
         print("[NOTE]: Create coverage file. Cmd: {}".format(cmd_coverage))
     sb.Popen(cmd_coverage, shell=True).wait()
 
-    return coverage_file
+    return coverage_file_path
 
 
 def read_coverage_file(input_coverage_file):
