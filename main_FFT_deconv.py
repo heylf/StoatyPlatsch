@@ -5,11 +5,13 @@ import sys
 
 import numpy as np
 
-# from FFT.development.development import analyze_FFT, create_FFT_plots
-from FFT.plotting import create_profile_plots
+# from FFT.development.development import (analyze_FFT_old, analyze_FFT_old2,
+#                                          create_FFT_plots_old)
+from FFT.plotting import create_FFT_plots, create_profile_plots
 from FFT.postprocessing import (create_output_files,
                                 refine_peaks_with_annotations)
 from FFT.preprocessing import create_coverage_file, read_coverage_file
+from FFT.processing import analyze_with_FFT, deconvolute_with_FFT
 
 
 if __name__ == '__main__':
@@ -64,16 +66,26 @@ if __name__ == '__main__':
               " argument has no effect.")
         )
 
+    # Define arguments for configuring the deconvolution behavior.
+    parser.add_argument(
+        "--num_padding",
+        default=[20, 20],
+        nargs=2,
+        help=("Number of zeros that should be padded to the left and right"
+              " side of the peak profiles, respectively. (default: [20, 20])"),
+        type=int
+        )
+
     # Define arguments for configuring the plotting behavior.
     plot_group = parser.add_mutually_exclusive_group()
     plot_group.add_argument(
         "--plot_limit",
         default=10,
         help=("Defines the maximum number of peaks for which plots are"
-              " created (default: 10). If the number of peaks is larger than"
-              " this value, the peaks for plotting are chosen equally"
-              " distributed. For values < 0 plots are created for all peaks."
-              " Cannot be used with argument 'plot_peak_ids'."),
+              " created. If the number of peaks is larger than this value, the"
+              " peaks for plotting are chosen equally distributed. For values"
+              " < 0 plots are created for all peaks. Cannot be used with"
+              " argument 'plot_peak_ids'. (default: 10)"),
         type=int
         )
     plot_group.add_argument(
@@ -140,11 +152,25 @@ if __name__ == '__main__':
     create_profile_plots(peaks_to_plot,
                          os.path.join(args.output_folder, 'plot_profiles'))
 
-    # create_FFT_plots(peaks, os.path.join(args.output_folder, 'FFT_profiles'))
+    analyze_with_FFT(peaks, args.num_padding, args.verbose)
 
-    # analyze_FFT_old(peaks, os.path.join(args.output_folder, 'FFT_tests'))
+    deconvolute_with_FFT(peaks, args.num_padding, args.verbose)
 
-    # analyze_FFT(peaks, os.path.join(args.output_folder, 'FFT_results'))
+    # create_FFT_plots_old(peaks_to_plot,
+    #                      os.path.join(args.output_folder, 'FFT_profiles'))
+
+    # analyze_FFT_old(peaks_to_plot,
+    #                 os.path.join(args.output_folder, 'FFT_tests'))
+
+    create_FFT_plots(peaks_to_plot,
+                     os.path.join(args.output_folder, 'FFT_plots'))
+
+    # print("Old FFT")
+    # analyze_FFT_old2(peaks_to_plot,
+    #                  os.path.join(args.output_folder, 'FFT_results'))
+
+    # create_FFT_plots_old(peaks_to_plot,
+    #                      os.path.join(args.output_folder, 'FFT_plots'))
 
     _file_path_overview, _file_path_summits, file_path_all_peaks = \
         create_output_files(peaks, args.output_folder, args.verbose)

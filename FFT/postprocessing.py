@@ -59,9 +59,6 @@ def create_output_files(peaks, output_path, verbose=False):
     verbose : bool (default: False)
         Print information to console when set to True.
 
-    TODO: Currently subpeaks are not saved, only the original peaks.
-    TODO: How consider padding?
-
     Returns
     -------
     file_path_overview : str
@@ -87,25 +84,49 @@ def create_output_files(peaks, output_path, verbose=False):
     for p_id in sorted(peaks.keys()):
         peak = peaks[p_id]
 
-        # TODO: For multiple subpeaks: Write number and list of chrom_starts.
+#         file_overview.write(
+#             "{0}\t{1}\t{2}\n".format(peak.name, "1", peak.chrom_start)
+#             )
+        starts = np.array([], dtype=int)
+
+        for p in peak.fft.new_peaks:
+            starts = np.append(starts, p[1])
         file_overview.write(
-            "{0}\t{1}\t{2}\n".format(peak.name, "1", peak.chrom_start)
+            "{0}\t{1}\t{2}\n".format(peak.name, len(peak.fft.new_peaks),
+                                     starts)
             )
 
-        # TODO: Maybe also when there are no subpeaks: Use result of FFT for
-        #       finding the summit, not argmax.
-        summit = peak.chrom_start + np.argmax(peak.coverage)
-        # TODO: For multiple subpeaks: Add "_#" to name.
-        file_summits.write(
-            "{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n"
-            .format(peak.chrom, summit, peak.name, peak.score, peak.strand)
-            )
+#         summit = peak.chrom_start + np.argmax(peak.coverage)
+#             file_summits.write(
+#                 "{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n"
+#                 .format(peak.chrom, summit, peak.name, peak.score,
+#                         peak.strand)
+#                 )
 
-        file_all_peaks.write(
-            "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"
-            .format(peak.chrom, peak.chrom_start, peak.chrom_end, peak.name,
-                    peak.score, peak.strand)
-            )
+        for p_i, p in enumerate(peak.fft.new_peaks):
+            file_summits.write(
+                "{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n"
+                .format(peak.chrom, p[1],
+                        "{}{}".format(peak.name,
+                                      "" if len(peak.fft.new_peaks) == 1
+                                      else "_{}".format(p_i)),
+                        peak.score, peak.strand)
+                )
+
+#         file_all_peaks.write(
+#             "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"
+#             .format(peak.chrom, peak.chrom_start, peak.chrom_end, peak.name,
+#                     peak.score, peak.strand)
+#             )
+
+            file_all_peaks.write(
+                "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"
+                .format(peak.chrom, p[0], p[2],
+                        "{}{}".format(peak.name,
+                                      "" if len(peak.fft.new_peaks) == 1
+                                      else "_{}".format(p_i)),
+                        peak.score, peak.strand)
+                )
 
     file_overview.close()
     file_summits.close()
