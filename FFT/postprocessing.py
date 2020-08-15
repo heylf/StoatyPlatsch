@@ -84,24 +84,14 @@ def create_output_files(peaks, output_path, verbose=False):
     for p_id in sorted(peaks.keys()):
         peak = peaks[p_id]
 
-#         file_overview.write(
-#             "{0}\t{1}\t{2}\n".format(peak.name, "1", peak.chrom_start)
-#             )
         starts = np.array([], dtype=int)
 
         for p in peak.fft.new_peaks:
-            starts = np.append(starts, p[1])
+            starts = np.append(starts, p[0])
         file_overview.write(
             "{0}\t{1}\t{2}\n".format(peak.name, len(peak.fft.new_peaks),
                                      starts)
             )
-
-#         summit = peak.chrom_start + np.argmax(peak.coverage)
-#             file_summits.write(
-#                 "{0}\t{1}\t{1}\t{2}\t{3}\t{4}\n"
-#                 .format(peak.chrom, summit, peak.name, peak.score,
-#                         peak.strand)
-#                 )
 
         for p_i, p in enumerate(peak.fft.new_peaks):
             file_summits.write(
@@ -112,12 +102,6 @@ def create_output_files(peaks, output_path, verbose=False):
                                       else "_{}".format(p_i)),
                         peak.score, peak.strand)
                 )
-
-#         file_all_peaks.write(
-#             "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"
-#             .format(peak.chrom, peak.chrom_start, peak.chrom_end, peak.name,
-#                     peak.score, peak.strand)
-#             )
 
             file_all_peaks.write(
                 "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"
@@ -136,7 +120,8 @@ def create_output_files(peaks, output_path, verbose=False):
 
 
 def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
-                                  output_path, verbose=False):
+                                  output_path, remove_tmp_files=True,
+                                  verbose=False):
     """ Refine peaks with the given annotation files using bedtools intersect.
 
     file_path_peaks : str
@@ -148,6 +133,9 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
     output_path : str
         The folder path where the coverage file should be saved. Non existing
         folders will be created.
+    remove_tmp_files : bool (default: True)
+        When set to True temporary files will be deleted, otherwise they are
+        kept.
     verbose : bool (default: False)
         Print information to console when set to True.
     """
@@ -182,7 +170,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             file_path_peaks, gene_file, tmp_file_1
             )
         if verbose:
-            print("[NOTE]: ... Create 1st intersection. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create 1st intersection. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         tmp_file_2 = os.path.join(output_path, "tmp_gene_2.bed")
@@ -190,13 +178,13 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             file_path_peaks, gene_file, tmp_file_2
             )
         if verbose:
-            print("[NOTE]: ... Create 2nd intersection. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create 2nd intersection. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         cmd = "cat {} {} > {}".format(tmp_file_1, tmp_file_2,
                                       output_file_new_peaks_gene)
         if verbose:
-            print("[NOTE]: ... Concatenate files. Cmd: {}".format(cmd))
+            print("[NOTE] ... Concatenate files. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         output_file_new_peaks_sorted = os.path.join(
@@ -207,13 +195,14 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             output_file_new_peaks_gene, output_file_new_peaks_sorted
             )
         if verbose:
-            print("[NOTE]: ... Create sorted result. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create sorted result. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
-#         if verbose:
-#             print("[NOTE]: ... Remove temporary files.")
-#         os.remove(tmp_file_1)
-#         os.remove(tmp_file_2)
+        if remove_tmp_files:
+            if verbose:
+                print("[NOTE] ... Remove temporary files.")
+            os.remove(tmp_file_1)
+            os.remove(tmp_file_2)
 
     # Exon Annotation
     if exon_file:
@@ -240,7 +229,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             exon_file, tmp_file_1
             )
         if verbose:
-            print("[NOTE]: ... Create 1st intersection. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create 1st intersection. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         tmp_file_2 = os.path.join(output_path, "tmp_exon_2.bed")
@@ -249,13 +238,13 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             exon_file, tmp_file_2
             )
         if verbose:
-            print("[NOTE]: ... Create 2nd intersection. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create 2nd intersection. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         cmd = "cat {} {} > {}".format(tmp_file_1, tmp_file_2,
                                       output_file_new_peaks)
         if verbose:
-            print("[NOTE]: ... Concatenate files. Cmd: {}".format(cmd))
+            print("[NOTE] ... Concatenate files. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
         output_file_new_peaks_sorted = os.path.join(
@@ -268,10 +257,11 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             output_file_new_peaks, output_file_new_peaks_sorted
             )
         if verbose:
-            print("[NOTE]: ... Create sorted result. Cmd: {}".format(cmd))
+            print("[NOTE] ... Create sorted result. Cmd: {}".format(cmd))
         sb.Popen(cmd, shell=True).wait()
 
-#         if verbose:
-#             print("[NOTE]: ... Remove temporary files.")
-#         os.remove(tmp_file_1)
-#         os.remove(tmp_file_2)
+        if remove_tmp_files:
+            if verbose:
+                print("[NOTE] ... Remove temporary files.")
+            os.remove(tmp_file_1)
+            os.remove(tmp_file_2)

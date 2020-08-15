@@ -9,8 +9,8 @@ import numpy as np
 from .data import Peak
 
 
-def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
-                         verbose=False):
+def create_coverage_file(input_bed, input_bam, no_sorting=False,
+                         output_path=os.getcwd(), verbose=False):
     """ Creates the coverage file for the given peak and read file.
 
     Creates the coverage file for the peaks of the input files. The default
@@ -27,10 +27,10 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
     input_bam : str
         The file path of the read file used for the peak calling in bed or bam
         format.
-    no_sorting : bool
+    no_sorting : bool (default: False)
         When set to True the coverage is calculated without using the sorted
         parameter of 'bedtools coverage'.
-    output_path : str
+    output_path : str (default: path of the current working directory)
         The folder path where the coverage file should be saved. Non existing
         folders will be created.
     verbose : bool (default: False)
@@ -69,7 +69,7 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
         cmd_sort = "sort -V -k1,1 -k2,2n {} > {}".format(input_bed,
                                                          input_bed_sorted)
         if verbose:
-            print("[NOTE]: Create sorted peak file. Cmd: {}".format(cmd_sort))
+            print("[NOTE] Create sorted peak file. Cmd: {}".format(cmd_sort))
         sb.Popen(cmd_sort, shell=True).wait()
 
         cmd_coverage = \
@@ -79,13 +79,13 @@ def create_coverage_file(input_bed, input_bam, no_sorting, output_path,
                 )
 
     if verbose:
-        print("[NOTE]: Create coverage file. Cmd: {}".format(cmd_coverage))
+        print("[NOTE] Create coverage file. Cmd: {}".format(cmd_coverage))
     sb.Popen(cmd_coverage, shell=True).wait()
 
     return coverage_file_path
 
 
-def read_coverage_file(input_coverage_file):
+def read_coverage_file(input_coverage_file, verbose=False):
     """ Reads and processes the given coverage file.
 
     Parameters
@@ -107,6 +107,8 @@ def read_coverage_file(input_coverage_file):
 
         Additional columns between columns 'strand' and 'nucleotide' are
         ignored.
+    verbose : bool (default: False)
+        Print information to console when set to True.
 
 
     Returns
@@ -114,6 +116,10 @@ def read_coverage_file(input_coverage_file):
     peaks : dict
         Dictionary containing the peak data.
     """
+
+    if verbose:
+        print("[NOTE] Read the coverage file from '{}'."
+              .format(input_coverage_file))
 
     peaks = {}
     peak_index = -1

@@ -22,6 +22,17 @@ class Peak(object):
         The coverage for each nucleotide.
     peak_number : int
         The number of the peak.
+    fft : FFT.processing.FFT
+        Dummy object, that bundles multiple information, after FFT has applied
+        to the peak, e.g.
+
+        - peak.fft.f : numpy.ndarray
+              Contains the padded profile, that was used for FFT.
+        - peak.fft.fhat : numpy.ndarray
+            The result of the FFT.
+        - ...
+
+        See processing routines for detailed information.
 
     References
     ----------
