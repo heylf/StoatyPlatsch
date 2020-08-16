@@ -311,7 +311,7 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                             best_map[2] = distances[dist_freq_index]
 
                     maxima_to_assign.pop(best_map[0])
-                    m = peak.fft.frequency_max_pos[f][dist_freq_index]
+                    m = peak.fft.frequency_max_pos[f][best_map[1]]
 
                     # Find the minima of the given frequency for calculating
                     # the peak width.
