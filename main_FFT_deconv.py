@@ -153,6 +153,12 @@ if __name__ == '__main__':
         nargs="+",
         type=int
         )
+    parser.add_argument(
+        "--plot_format",
+        default="svg",
+        help=("The file format which is used for saving the plots. See"
+              " matplotlib documentation for supported values.")
+        )
 
     # Optional arguments for annotations
     parser.add_argument(
@@ -212,7 +218,9 @@ if __name__ == '__main__':
     if plot_peak_profiles:
         create_profile_plots(peaks_to_plot,
                              os.path.join(args.output_folder, 'plot_profiles'),
-                             verbose=args.verbose)
+                             output_format=args.plot_format,
+                             verbose=args.verbose
+                             )
 
     if args.fft_analysis:
 
@@ -221,6 +229,7 @@ if __name__ == '__main__':
         create_FFT_analysis_plots(
             peaks_to_plot,
             os.path.join(args.output_folder, 'FFT_analysis_plots'),
+            output_format=args.plot_format,
             plot_fft_values=plot_fft_values,
             plot_fft_transformations=plot_fft_transformations,
             verbose=args.verbose
@@ -231,9 +240,10 @@ if __name__ == '__main__':
                          height=args.height, verbose=args.verbose)
 
     create_deconv_profile_plots(
-            peaks_to_plot,
-            os.path.join(args.output_folder, 'plot_profiles_deconv'),
-            verbose=args.verbose
+        peaks_to_plot,
+        os.path.join(args.output_folder, 'plot_profiles_deconv'),
+        output_format=args.plot_format,
+        verbose=args.verbose
         )
 
     _file_path_overview, _file_path_summits, file_path_all_peaks = \
