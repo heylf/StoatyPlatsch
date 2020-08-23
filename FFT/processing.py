@@ -97,7 +97,44 @@ def analyze_with_FFT(peaks, num_padding, verbose=False):
             #                  # height=[minimal_height_new, max(y)])
 
 
+def add_subpeak(peak, left_boundary, center, right_boundary):
+    """ Adds the given subpeak to the list of new peaks.
+
+    Parameters
+    ----------
+    peak : Peak
+        The original peak with the peak data.
+    left_boundary : int
+        The left boundary of the new subpeak, coordinates of the padded input
+        peak, zero-based.
+    center : int
+        The center of the new subpeak, coordinates of the padded input peak,
+        zero-based.
+    right_boundary : int
+        The right boundary of the new subpeak, coordinates of the padded input
+        peak, zero-based.
+    """
+    offset = peak.chrom_start - peak.fft.num_padding[0]
+
+    left_boundary = left_boundary + offset
+    center = center + offset
+    right_boundary = right_boundary + offset
+
+    if peak.fft.clip_boundary == 'peak':
+        if left_boundary < peak.chrom_start:
+            left_boundary = peak.chrom_start
+        if right_boundary > peak.chrom_end:
+            right_boundary = peak.chrom_end - 1
+
+    peak.fft.new_peaks.append(
+        [left_boundary, center,
+         right_boundary + 1  # Chrom end is non-inclusive, therefore + 1
+         ]
+        )
+
+
 def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
+                         clip_boundary='peak',
                          distance=10, height=10, verbose=False):
     """ Deconvolutes the given peaks by using a FFT approach.
 
@@ -127,6 +164,10 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                          maximum of the profile. Uses the mapped maximum of the
                          frequency and the distance to its minima as peak
                          center and width.
+    clip_boundary : {'peak', 'padding'}, (default: 'peak')
+        'peak': Uses the original, unpadded peak boundaries as outermost
+                boundaries.
+        'padding': Uses the padded peak boundaries as outermost boundaries.
     distance : int (default: 10)
         Used as parameter for function 'find_peaks' when calculating the maxima
         of the original profile. Only used for the 'map_profile' and the
@@ -153,6 +194,7 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
 
         peak.fft = FFT()
         peak.fft.approach = approach
+        peak.fft.clip_boundary = clip_boundary
         peak.fft.num_padding = num_padding
         peak.fft.f = np.pad(peak.coverage, num_padding)
 
@@ -208,13 +250,7 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                         np.argwhere(peak.fft.local_mins > m).min()
                     ]
 
-                offset = peak.chrom_start - peak.fft.num_padding[0]
-                peak.fft.new_peaks.append(
-                    [left_boundary + offset, m + offset,
-                     right_boundary + offset
-                     + 1  # Chrom end is non-inclusive, therefore + 1
-                     ]
-                    )
+                add_subpeak(peak, left_boundary, m, right_boundary)
 
         elif approach in ['map_profile', 'map_FFT_signal']:
             # Estimate number of possible subpeaks by calculating maxima of
@@ -289,13 +325,8 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                                     > m).min()
                         ]
 
-                    offset = peak.chrom_start - peak.fft.num_padding[0]
-                    peak.fft.new_peaks.append(
-                        [left_boundary + offset, best_freq[1] + offset,
-                         right_boundary + offset
-                         + 1  # Chrom end is non-inclusive, therefore + 1
-                         ]
-                        )
+                    add_subpeak(peak, left_boundary, best_freq[1],
+                                right_boundary)
             else:
                 maxima_to_assign = peak.fft.local_maxs.tolist()
                 for f in frequencies_to_consider[:-1]:
@@ -324,13 +355,7 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                                     > m).min()
                         ]
 
-                    offset = peak.chrom_start - peak.fft.num_padding[0]
-                    peak.fft.new_peaks.append(
-                        [left_boundary + offset, m + offset,
-                         right_boundary + offset
-                         + 1  # Chrom end is non-inclusive, therefore + 1
-                         ]
-                        )
+                    add_subpeak(peak, left_boundary, m, right_boundary)
 
         else:
             raise ValueError("Parameter 'approach' must have one of the"

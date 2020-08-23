@@ -111,7 +111,18 @@ if __name__ == '__main__':
               " (default: 'map_FFT_signal')"
               )
         )
-
+    parser.add_argument(
+        "--clip_boundary",
+        default="peak",
+        choices=["peak", "padding"],
+        help=("Defines the limits of the subpeaks for the peaks boundaries."
+              " 'peak': Uses the original, unpadded peak boundaries as"
+              "         outermost boundaries."
+              " 'padding': Uses the padded peak boundaries as outermost"
+              "            boundaries."
+              " (default: 'peak')"
+              )
+        )
     parser.add_argument(
         "--distance",
         default=10,
@@ -236,8 +247,10 @@ if __name__ == '__main__':
             )
 
     deconvolute_with_FFT(peaks=peaks, num_padding=args.num_padding,
-                         approach=args.deconv_approach, distance=args.distance,
-                         height=args.height, verbose=args.verbose)
+                         approach=args.deconv_approach,
+                         clip_boundary=args.clip_boundary,
+                         distance=args.distance, height=args.height,
+                         verbose=args.verbose)
 
     create_deconv_profile_plots(
         peaks_to_plot,

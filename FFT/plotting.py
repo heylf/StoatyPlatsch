@@ -202,6 +202,12 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
                         peak.fft.filtered_f,
                         label='smoothed profile',
                         linewidth=1, marker='.')
+
+            # Mark the maxima of the smoothed profile which were used for
+            # defining the peak centers.
+            ax_rel.plot(peak.fft.local_maxs - peak.fft.num_padding[0],
+                        peak.fft.filtered_f[peak.fft.local_maxs],
+                        "o", markersize=8, fillstyle='none', color="red")
         else:
             # Add the considered frequencies of the FFT analysis.
             for i, frequency in sorted(peak.fft.frequencies.items()):
@@ -211,13 +217,11 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
                             frequency,
                             label='frequency {}'.format(i))
 
-            # Mark the maxima of the original profile which where used for
+            # Mark the maxima of the original profile which were used for
             # mapping them to the signal or vice versa.
-            # for m in peak.fft.local_maxs:
-            #     pass
             ax_rel.plot(peak.fft.local_maxs - peak.fft.num_padding[0],
                         peak.fft.f[peak.fft.local_maxs],
-                        "o", markersize=8, fillstyle='none')
+                        "o", markersize=8, fillstyle='none', color="red")
 
         ax_rel.legend()
         width = len("{}".format(max(peaks)))
