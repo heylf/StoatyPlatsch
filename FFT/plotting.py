@@ -194,14 +194,12 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
         # Create plot with additional information, depending on the used
         # FFT approach.
         fig, [ax_rel, _ax_subpeaks] = create_deconv_profile_figure(peak)
+        xrange = np.arange(-peak.fft.num_padding[0],
+                           len(peak.fft.f) - peak.fft.num_padding[0])
         if peak.fft.approach == 'smooth':
             # Add the smoothed profile.
-            ax_rel.plot(np.arange(-peak.fft.num_padding[0],
-                                  len(peak.fft.f) - peak.fft.num_padding[0]
-                                  ),
-                        peak.fft.filtered_f,
-                        label='smoothed profile',
-                        linewidth=1, marker='.')
+            ax_rel.plot(xrange, peak.fft.filtered_f,
+                        label='smoothed profile', linewidth=1, marker='.')
 
             # Mark the maxima of the smoothed profile which were used for
             # defining the peak centers.
@@ -209,13 +207,32 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
                         peak.fft.filtered_f[peak.fft.local_maxs],
                         "o", markersize=8, fillstyle='none', color="red")
         else:
-            # Add the considered frequencies of the FFT analysis.
-            for i, frequency in sorted(peak.fft.frequencies.items()):
-                ax_rel.plot(np.arange(-peak.fft.num_padding[0],
-                            len(peak.fft.f) - peak.fft.num_padding[0]
-                            ),
-                            frequency,
-                            label='frequency {}'.format(i))
+            if peak.fft.disable_frequency_shift:
+                # Add the considered frequencies of the FFT.
+                for idx_freq, frequency in sorted(
+                            peak.fft.frequencies.items()
+                        ):
+                    ax_rel.plot(
+                        np.arange(-peak.fft.num_padding[0],
+                                  len(peak.fft.f) - peak.fft.num_padding[0]
+                                  ),
+                        frequency,
+                        label='frequency {}'.format(idx_freq)
+                        )
+            else:
+                # Add the actual used, shifted frequencies.
+                for mapping in peak.fft.mappings:
+                    ax_rel.plot(xrange, mapping.shifted_freq,
+                                label='frequency {} (shifted)'
+                                      .format(mapping.idx_freq))
+                # Add the considered (original) frequencies of the FFT.
+                for idx_freq, frequency in sorted(
+                            peak.fft.frequencies.items()
+                        ):
+                    ax_rel.plot(
+                        xrange,  frequency,
+                        label='frequency {} (original)'.format(idx_freq),
+                        linestyle='--')
 
             # Mark the maxima of the original profile which were used for
             # mapping them to the signal or vice versa.

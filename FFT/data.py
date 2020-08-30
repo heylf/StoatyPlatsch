@@ -1,4 +1,40 @@
 
+import numpy as np
+
+
+class Mapping(object):
+    """ Contains the data of the mapping between profile and FFT frequencies.
+
+    Attributes
+    ----------
+    idx_max_profile : int
+        The index of the maximum within the profiles maxima.
+    max_pos_profile : int
+        The position of the profile maximum.
+    idx_freq : int
+        The index of the mapped frequency.
+    max_pos_freq : int
+        The position of the maximum of the mapped frequency.
+    distance : int
+        The distance between the mapped maximum of the profile and the mapped
+        maximum of the frequency.
+    """
+
+    def __init__(self, idx_max_profile=-1, max_pos_profile=-1,
+                 idx_freq=-1, max_pos_freq=-1, distance=np.Inf):
+        """ Constructor
+
+        Parameters
+        ----------
+        See attributes description of the class.
+        """
+        self.idx_max_profile = idx_max_profile
+        self.max_pos_profile = max_pos_profile
+        self.idx_freq = idx_freq
+        self.max_pos_freq = max_pos_freq
+        self.distance = distance
+
+
 class Peak(object):
     """ Contains the data of a peak.
 

@@ -2,6 +2,8 @@
 import numpy as np
 from scipy import signal
 
+from FFT.data import Mapping
+
 
 class FFT(object):
     ''' Dummy class for bundling FFT relevant variables together. '''
@@ -123,8 +125,14 @@ def add_subpeak(peak, left_boundary, center, right_boundary):
     if peak.fft.clip_boundary == 'peak':
         if left_boundary < peak.chrom_start:
             left_boundary = peak.chrom_start
-        if right_boundary > peak.chrom_end:
+        if right_boundary >= peak.chrom_end:
             right_boundary = peak.chrom_end - 1
+    else:
+        # Can be also outside padding range, due to frequency shift.
+        if left_boundary < peak.chrom_start - peak.fft.num_padding[0]:
+            left_boundary = peak.chrom_start - peak.fft.num_padding[0]
+        if right_boundary >= peak.chrom_end + peak.fft.num_padding[1]:
+            right_boundary = peak.chrom_end + peak.fft.num_padding[1] - 1
 
     peak.fft.new_peaks.append(
         [left_boundary, center,
@@ -134,8 +142,8 @@ def add_subpeak(peak, left_boundary, center, right_boundary):
 
 
 def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
-                         clip_boundary='peak',
-                         distance=10, height=10, verbose=False):
+                         clip_boundary='peak', distance=10, height=10,
+                         disable_frequency_shift=False, verbose=False):
     """ Deconvolutes the given peaks by using a FFT approach.
 
     Parameters
@@ -176,6 +184,10 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
         Used as parameter for function 'find_peaks' when calculating the maxima
         of the original profile. Only used for the 'map_profile' and the
         'map_FFT_signal' approaches.
+    disable_frequency_shift : bool (default: False)
+        Disables shifting the underlying FFT frequencies to the mapped maxima
+        of the profiles. Only used for the 'map_profile' and the
+        'map_FFT_signal' approaches.
     verbose : bool (default: False)
         Print information to console when set to True.
 
@@ -195,6 +207,7 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
         peak.fft = FFT()
         peak.fft.approach = approach
         peak.fft.clip_boundary = clip_boundary
+        peak.fft.disable_frequency_shift = disable_frequency_shift
         peak.fft.num_padding = num_padding
         peak.fft.f = np.pad(peak.coverage, num_padding)
 
@@ -271,91 +284,108 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
             # Calculate the single frequency values.
             peak.fft.frequencies = {}
             peak.fft.frequency_max_pos = {}
-            peak.fft.frequency_max_distance = {}
             peak.fft.frequency_min_pos = {}
-            for i in frequencies_to_consider:
+
+            for idx_freq in frequencies_to_consider:
                 indices = np.zeros(len(peak.fft.fhat))
-                indices[i] = 1
-                peak.fft.frequencies[i] = \
+                indices[idx_freq] = 1
+                peak.fft.frequencies[idx_freq] = \
                     np.fft.irfft(indices * peak.fft.fhat, peak.fft.n)
-                peak.fft.frequency_max_pos[i] = \
-                    signal.find_peaks(peak.fft.frequencies[i])[0]
-                peak.fft.frequency_min_pos[i] = \
-                    signal.find_peaks(-peak.fft.frequencies[i])[0]
-                peak.fft.frequency_min_pos[i] = \
-                    np.concatenate(([0], peak.fft.frequency_min_pos[i],
+                peak.fft.frequency_max_pos[idx_freq] = \
+                    signal.find_peaks(peak.fft.frequencies[idx_freq])[0]
+                peak.fft.frequency_min_pos[idx_freq] = \
+                    signal.find_peaks(-peak.fft.frequencies[idx_freq])[0]
+                peak.fft.frequency_min_pos[idx_freq] = \
+                    np.concatenate(([0], peak.fft.frequency_min_pos[idx_freq],
                                     [peak.fft.n - 1]))
 
+            peak.fft.mappings = []
             if approach == 'map_profile':
-                for m in peak.fft.local_maxs:
-                    best_freq = [-1, -1, np.Inf]   # Index of best frequency,
-                    #     position of maximum in this frequency, distance.
+                for idx_max_profile, m in enumerate(peak.fft.local_maxs):
+                    mapping = Mapping(idx_max_profile=idx_max_profile,
+                                      max_pos_profile=m)
+                    peak.fft.mappings.append(mapping)
 
                     # For each maximum, calculate the distance to peaks of the
-                    # frequencies and choose the frequency which closest
+                    # frequencies and choose the frequency and its
+                    # corresponding maximum that is closest to the peaks
                     # maximum.
-                    for i in frequencies_to_consider:
+                    for idx_freq in frequencies_to_consider:
                         l_maxs = \
-                            np.argwhere(peak.fft.frequency_max_pos[i] <= m)
+                            np.argwhere(peak.fft.frequency_max_pos[idx_freq]
+                                        <= m)
                         if len(l_maxs) > 0:
-                            l_max = peak.fft.frequency_max_pos[i][l_maxs.max()]
-                            if (m - l_max) < best_freq[2]:
-                                best_freq[0] = i
-                                best_freq[1] = l_max
-                                best_freq[2] = m - l_max
+                            l_max = peak.fft.frequency_max_pos[idx_freq][
+                                l_maxs.max()]
+                            if (m - l_max) < mapping.distance:
+                                mapping.idx_freq = idx_freq
+                                mapping.max_pos_freq = l_max
+                                mapping.distance = m - l_max
                         r_maxs = \
-                            np.argwhere(peak.fft.frequency_max_pos[i] >= m)
+                            np.argwhere(peak.fft.frequency_max_pos[idx_freq]
+                                        >= m)
                         if len(r_maxs) > 0:
-                            r_max = peak.fft.frequency_max_pos[i][r_maxs.min()]
-                            if (r_max - m) < best_freq[2]:
-                                best_freq[0] = i
-                                best_freq[1] = r_max
-                                best_freq[2] = r_max - m
-                        if best_freq[2] == 0:
+                            r_max = peak.fft.frequency_max_pos[idx_freq][
+                                r_maxs.min()]
+                            if (r_max - m) < mapping.distance:
+                                mapping.idx_freq = idx_freq
+                                mapping.max_pos_freq = r_max
+                                mapping.distance = r_max - m
+                        if mapping.distance == 0:
                             break
 
-                    # Find the minima of the given frequency for calculating
-                    # the peak width.
-                    left_boundary = peak.fft.frequency_min_pos[best_freq[0]][
-                        np.argwhere(peak.fft.frequency_min_pos[best_freq[0]]
-                                    < m).max()
-                        ]
-                    right_boundary = peak.fft.frequency_min_pos[best_freq[0]][
-                        np.argwhere(peak.fft.frequency_min_pos[best_freq[0]]
-                                    > m).min()
-                        ]
-
-                    add_subpeak(peak, left_boundary, best_freq[1],
-                                right_boundary)
             else:
                 maxima_to_assign = peak.fft.local_maxs.tolist()
-                for f in frequencies_to_consider[:-1]:
-                    best_map = [-1, -1, np.Inf]   # Index of best max in
-                    #     profile, index of best max of frequency, distance
+                for idx_freq in frequencies_to_consider[:-1]:
+                    mapping = Mapping(idx_freq=idx_freq)
+                    peak.fft.mappings.append(mapping)
 
-                    for i_m, m in enumerate(maxima_to_assign):
-                        distances = abs(peak.fft.frequency_max_pos[f] - m)
+                    for idx_max_profile, max_pos_profile in enumerate(
+                            maxima_to_assign):
+                        distances = abs(peak.fft.frequency_max_pos[idx_freq]
+                                        - max_pos_profile)
                         dist_freq_index = np.argmin(distances)
-                        if distances[dist_freq_index] < best_map[2]:
-                            best_map[0] = i_m
-                            best_map[1] = dist_freq_index
-                            best_map[2] = distances[dist_freq_index]
+                        if distances[dist_freq_index] < mapping.distance:
+                            mapping.idx_max_profile = idx_max_profile
+                            mapping.max_pos_profile = max_pos_profile
+                            mapping.max_pos_freq = peak.fft.frequency_max_pos[
+                                idx_freq][dist_freq_index]
+                            mapping.distance = distances[dist_freq_index]
 
-                    maxima_to_assign.pop(best_map[0])
-                    m = peak.fft.frequency_max_pos[f][best_map[1]]
+                    maxima_to_assign.pop(mapping.idx_max_profile)
 
-                    # Find the minima of the given frequency for calculating
-                    # the peak width.
-                    left_boundary = peak.fft.frequency_min_pos[f][
-                        np.argwhere(peak.fft.frequency_min_pos[f]
-                                    < m).max()
+            for mapping in peak.fft.mappings:
+                # Find the minima of the given frequency for calculating
+                # the peak width.
+                # Note: This could be probably optimized by using the
+                #       frequency information directly to calculate the minima
+                #       instead of applying calculations with argwhere.
+                left_boundary = \
+                    peak.fft.frequency_min_pos[mapping.idx_freq][
+                        np.argwhere(peak.fft.frequency_min_pos[
+                                        mapping.idx_freq]
+                                    < mapping.max_pos_freq).max()
                         ]
-                    right_boundary = peak.fft.frequency_min_pos[f][
-                        np.argwhere(peak.fft.frequency_min_pos[f]
-                                    > m).min()
-                        ]
+                right_boundary = \
+                    peak.fft.frequency_min_pos[mapping.idx_freq][
+                        np.argwhere(peak.fft.frequency_min_pos[
+                                        mapping.idx_freq]
+                                    > mapping.max_pos_freq).min()
+                    ]
 
-                    add_subpeak(peak, left_boundary, m, right_boundary)
+                if disable_frequency_shift:
+                    shift = 0
+                    mapping.shift = None
+                    mapping.shifted_freq = None
+                else:
+                    shift = mapping.max_pos_profile - mapping.max_pos_freq
+                    mapping.shift = shift
+                    mapping.shifted_freq = \
+                        np.roll(peak.fft.frequencies[mapping.idx_freq], shift)
+
+                add_subpeak(peak, left_boundary + shift,
+                            mapping.max_pos_freq + shift,
+                            right_boundary + shift)
 
         else:
             raise ValueError("Parameter 'approach' must have one of the"

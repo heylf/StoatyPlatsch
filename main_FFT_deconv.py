@@ -141,6 +141,13 @@ if __name__ == '__main__':
               "  (default: 10)"),
         type=int
         )
+    parser.add_argument(
+        "--disable_frequency_shift",
+        action='store_true',
+        help=("Disables shifting the underlying FFT frequencies to the mapped"
+              " maxima of the profiles. Only used for the 'map_profile' and"
+              " the 'map_FFT_signal' approaches.")
+        )
 
     # Define arguments for configuring the plotting behavior.
     plot_group = parser.add_mutually_exclusive_group()
@@ -250,6 +257,7 @@ if __name__ == '__main__':
                          approach=args.deconv_approach,
                          clip_boundary=args.clip_boundary,
                          distance=args.distance, height=args.height,
+                         disable_frequency_shift=args.disable_frequency_shift,
                          verbose=args.verbose)
 
     create_deconv_profile_plots(
