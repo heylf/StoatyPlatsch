@@ -143,7 +143,8 @@ def add_subpeak(peak, left_boundary, center, right_boundary):
 
 def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                          clip_boundary='peak', distance=10, height=10,
-                         disable_frequency_shift=False, verbose=False):
+                         disable_frequency_shift=False,
+                         main_freq_filter_value=3, verbose=False):
     """ Deconvolutes the given peaks by using a FFT approach.
 
     Parameters
@@ -188,6 +189,12 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
         Disables shifting the underlying FFT frequencies to the mapped maxima
         of the profiles. Only used for the 'map_profile' and the
         'map_FFT_signal' approaches.
+    main_freq_filter_value : int (default: 3)
+        Defines the number of found maxima in the peak profile that are used
+        for filtering the main frequency. Is the number of maxima equal to the
+        defined value, the main frequency will be ignored for the
+        deconvolution. A value <= 0 disables filtering the main frequency. Only
+        used for the 'map_profile' and the 'map_FFT_signal' approaches.
     verbose : bool (default: False)
         Print information to console when set to True.
 
@@ -279,7 +286,20 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
 
             # First "frequency" 0 should be ignored, it is only constant.
             frequencies_to_consider = \
-                peak.fft.index_argmax[1:len(peak.fft.local_maxs)+2]
+                np.delete(peak.fft.index_argmax,
+                          np.where(peak.fft.index_argmax == 0)[0])
+            # Second "main frequency" should be ignored depending on value
+            # of main_freq_filter_value and the number of found maximums on
+            # the profile.
+            if ((main_freq_filter_value > 0)
+                    and (main_freq_filter_value <= len(peak.fft.local_maxs))):
+                frequencies_to_consider = \
+                    np.delete(frequencies_to_consider,
+                              np.where(frequencies_to_consider == 1)[0])
+            # Pick the number of considered frequencies depending on the found
+            # maxima.
+            frequencies_to_consider = \
+                frequencies_to_consider[:len(peak.fft.local_maxs)+1]
 
             # Calculate the single frequency values.
             peak.fft.frequencies = {}

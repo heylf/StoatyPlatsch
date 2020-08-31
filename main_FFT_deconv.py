@@ -148,6 +148,18 @@ if __name__ == '__main__':
               " maxima of the profiles. Only used for the 'map_profile' and"
               " the 'map_FFT_signal' approaches.")
         )
+    parser.add_argument(
+        "--main_freq_filter_value",
+        default=3,
+        help=("Defines the number of found maxima in the peak profile that are"
+              " used for filtering the main frequency. Is the number of maxima"
+              " equal to the defined value, the main frequency will be ignored"
+              " for the deconvolution. A value <= 0 disables filtering the"
+              " main frequency. Only used for the 'map_profile' and the"
+              " 'map_FFT_signal' approaches.(default: 3)"),
+        metavar="FILTER_VALUE",
+        type=int
+        )
 
     # Define arguments for configuring the plotting behavior.
     plot_group = parser.add_mutually_exclusive_group()
@@ -258,6 +270,7 @@ if __name__ == '__main__':
                          clip_boundary=args.clip_boundary,
                          distance=args.distance, height=args.height,
                          disable_frequency_shift=args.disable_frequency_shift,
+                         main_freq_filter_value=args.main_freq_filter_value,
                          verbose=args.verbose)
 
     create_deconv_profile_plots(
