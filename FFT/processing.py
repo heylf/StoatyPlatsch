@@ -167,13 +167,17 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                        closest to the peak maximum and is also part of the
                        frequencies contributing the most to the signal. Uses
                        the mapped maximum of the frequency and the distance
-                       to its minima as peak center and width.
+                       to its minima as peak center and width. May be shifted
+                       towards the mapped maximum of the peak profile,
+                       depending on parameter 'disable_frequency_shift'.
        'map_FFT_signal': Calculates the peaks (maxima) of the original profile
                          and the underlying FFT frequencies. Maps each of the
                          frequencies that contributes most to the signal to one
                          maximum of the profile. Uses the mapped maximum of the
                          frequency and the distance to its minima as peak
-                         center and width.
+                         center and width. May be shifted towards the mapped
+                         maximum of the peak profile, depending on parameter
+                         'disable_frequency_shift'.
     clip_boundary : {'peak', 'padding'}, (default: 'peak')
         'peak': Uses the original, unpadded peak boundaries as outermost
                 boundaries.
@@ -363,10 +367,17 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
 
             else:
                 maxima_to_assign = peak.fft.local_maxs.tolist()
+
+                # Assign each of the considered frequencies to one maximum of
+                # the peak profile.
                 for idx_freq in frequencies_to_consider[:-1]:
                     mapping = Mapping(idx_freq=idx_freq)
                     peak.fft.mappings.append(mapping)
 
+                    # For each maximum of the profile that is not mapped yet,
+                    # calculate the distances to the maxima of the current
+                    # frequency and choose the maximum of the profile and the
+                    # maximum of the frequency that have the smallest distance.
                     for idx_max_profile, max_pos_profile in enumerate(
                             maxima_to_assign):
                         distances = abs(peak.fft.frequency_max_pos[idx_freq]
@@ -400,6 +411,8 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                                     > mapping.max_pos_freq).min()
                     ]
 
+                # Shift the new subpeak towards the maximum of the profile, if
+                # not disabled.
                 if disable_frequency_shift:
                     shift = 0
                     mapping.shift = None
