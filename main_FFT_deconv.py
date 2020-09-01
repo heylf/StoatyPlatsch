@@ -142,6 +142,15 @@ if __name__ == '__main__':
         type=int
         )
     parser.add_argument(
+        "--prominence",
+        default=2,
+        help=("Used as parameter for function 'find_peaks' when calculating"
+              " the maxima of the original profile. Only used for the"
+              " 'map_profile' and the 'map_FFT_signal' approaches."
+              "  (default: 2)"),
+        type=int
+        )
+    parser.add_argument(
         "--disable_frequency_shift",
         action='store_true',
         help=("Disables shifting the underlying FFT frequencies to the mapped"
@@ -269,6 +278,7 @@ if __name__ == '__main__':
                          approach=args.deconv_approach,
                          clip_boundary=args.clip_boundary,
                          distance=args.distance, height=args.height,
+                         prominence=args.prominence,
                          disable_frequency_shift=args.disable_frequency_shift,
                          main_freq_filter_value=args.main_freq_filter_value,
                          verbose=args.verbose)

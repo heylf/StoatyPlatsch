@@ -143,6 +143,7 @@ def add_subpeak(peak, left_boundary, center, right_boundary):
 
 def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
                          clip_boundary='peak', distance=10, height=10,
+                         prominence=2,
                          disable_frequency_shift=False,
                          main_freq_filter_value=3, verbose=False):
     """ Deconvolutes the given peaks by using a FFT approach.
@@ -182,6 +183,10 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
         of the original profile. Only used for the 'map_profile' and the
         'map_FFT_signal' approaches.
     height : int (default: 10)
+        Used as parameter for function 'find_peaks' when calculating the maxima
+        of the original profile. Only used for the 'map_profile' and the
+        'map_FFT_signal' approaches.
+    prominence : int (default: 2)
         Used as parameter for function 'find_peaks' when calculating the maxima
         of the original profile. Only used for the 'map_profile' and the
         'map_FFT_signal' approaches.
@@ -282,7 +287,9 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
 
             peak.fft.local_maxs = \
                 signal.find_peaks(peak.fft.f, distance=distance,
-                                  height=[height])[0]
+                                  height=[height],
+                                  prominence=prominence
+                                  )[0]
 
             # First "frequency" 0 should be ignored, it is only constant.
             frequencies_to_consider = \
