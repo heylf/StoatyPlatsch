@@ -72,9 +72,10 @@ class Peak(object):
 
     References
     ----------
-    For the description of the the attributes see also
+    For the description of the the attributes (except for 'fft') see also:
     .. [1] https://en.wikipedia.org/wiki/BED_(file_format)
     .. [2] https://bedtools.readthedocs.io/en/latest/content/tools/coverage.html    # @IgnorePep8
+    .. [3] https://genome.ucsc.edu/FAQ/FAQformat#format1
     """
 
     def __init__(self, chrom, chrom_start, chrom_end, name, score, strand,
