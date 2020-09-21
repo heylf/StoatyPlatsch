@@ -11,7 +11,7 @@ import numpy as np
 matplotlib.rcParams["figure.figsize"] = [12, 8]
 
 
-def draw_profile(peak, _fig, ax_rel, fft_applied=False):
+def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
     """ Draws the profile plot for the peak on the given figure and axis.
 
     Parameters
@@ -26,6 +26,9 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False):
     fft_applied : bool (default: False)
         True when the profile plot should be drawn for a peak that was already
         processed with FFT.
+    paper_plots : bool (default: False)
+        Use specific plot settings when set to True to improve quality when
+        embedding the plots into a Latex document.
 
     Returns
     -------
@@ -65,18 +68,22 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False):
     #  Disable scientific notation.
     ax_abs.ticklabel_format(useOffset=False, style='plain')
 
-    ax_rel.legend()
+    if not paper_plots:
+        ax_rel.legend()
 
     return lines
 
 
-def create_deconv_profile_figure(peak):
+def create_deconv_profile_figure(peak, paper_plots=False):
     """ Creates figure of the peak profile and deconvoluted peaks.
 
     Parameters
     ----------
     peak : Peak
         The peak data.
+    paper_plots : bool (default: False)
+        Use specific plot settings when set to True to improve quality when
+        embedding the plots into a Latex document.
 
     Returns
     -------
@@ -99,7 +106,7 @@ def create_deconv_profile_figure(peak):
     ax_rel = fig.add_subplot(gs[:row_count_subfig1, :])
     ax_subpeaks = fig.add_subplot(gs[-row_count_subfig2:, :])
 
-    draw_profile(peak, fig, ax_rel, fft_applied=True)
+    draw_profile(peak, fig, ax_rel, fft_applied=True, paper_plots=paper_plots)
 
     subpeaks_names = np.empty(len(peak.fft.new_peaks), dtype=object)
     subpeaks_left = np.empty(len(peak.fft.new_peaks), dtype=int)
@@ -151,7 +158,7 @@ def create_deconv_profile_figure(peak):
 
 
 def create_deconv_profile_plots(peaks, output_path, output_format='svg',
-                                verbose=False):
+                                verbose=False, paper_plots=False):
     """ Creates and saves the peak profiles and deconvoluted peaks.
 
     Parameters
@@ -166,6 +173,9 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
         matplotlib documentation for supported values.
     verbose : bool (default: False)
         Print information to console when set to True.
+    paper_plots : bool (default: False)
+        Use specific plot settings when set to True to improve quality when
+        embedding the plots into a Latex document.
     """
 
     if len(peaks) == 0:
@@ -182,7 +192,8 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
         if verbose:
             print("[NOTE] ... Create plots for peak {}.".format(p_id))
 
-        fig, [_ax_rel, _ax_subpeaks] = create_deconv_profile_figure(peak)
+        fig, [_ax_rel, _ax_subpeaks] = \
+            create_deconv_profile_figure(peak, paper_plots=paper_plots)
         width = len("{}".format(max(peaks)))
         file_path = os.path.join(
             output_path,
@@ -193,7 +204,8 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
 
         # Create plot with additional information, depending on the used
         # FFT approach.
-        fig, [ax_rel, _ax_subpeaks] = create_deconv_profile_figure(peak)
+        fig, [ax_rel, _ax_subpeaks] = \
+            create_deconv_profile_figure(peak, paper_plots=paper_plots)
         xrange = np.arange(-peak.fft.num_padding[0],
                            len(peak.fft.f) - peak.fft.num_padding[0])
         if peak.fft.approach == 'smooth':
@@ -240,7 +252,8 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
                         peak.fft.f[peak.fft.local_maxs],
                         "o", markersize=8, fillstyle='none', color="red")
 
-        ax_rel.legend()
+        if not paper_plots:
+            ax_rel.legend()
         width = len("{}".format(max(peaks)))
         file_path = os.path.join(
             output_path,
@@ -254,7 +267,7 @@ def create_deconv_profile_plots(peaks, output_path, output_format='svg',
 def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
                               plot_fft_values=True,
                               plot_fft_transformations=True,
-                              verbose=False):
+                              verbose=False, paper_plots=False):
     """ Creates and saves plots for analyzing the FFT approach.
 
     Parameters
@@ -273,6 +286,9 @@ def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
         Enables plotting different FFT transformation and filter results.
     verbose : bool (default: False)
         Print information to console when set to True.
+    paper_plots : bool (default: False)
+        Use specific plot settings when set to True to improve quality when
+        embedding the plots into a Latex document.
     """
 
     if ((len(peaks) == 0)
@@ -289,6 +305,21 @@ def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
 
         if verbose:
             print("[NOTE] ... Create plots for peak {}.".format(p_id))
+
+        print("[NOTE] ... ... Create preprocessed profile plot.")
+
+        fig, ax_rel = plt.subplots()
+        draw_profile(peak, fig, ax_rel, fft_applied=True,
+                     paper_plots=paper_plots)
+        fig.tight_layout()
+        width = len("{}".format(max(peaks)))
+        file_path = os.path.join(
+            output_path,
+            'preprocessed_peak__id_{:0{}d}.{}'.format(p_id, width,
+                                                      output_format)
+            )
+        fig.savefig(file_path, format=output_format)
+        plt.close(fig)
 
         if plot_fft_values:
             if verbose:
@@ -379,7 +410,8 @@ def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
 
                 fig, ax_rel = plt.subplots()
 
-                draw_profile(peak, fig, ax_rel, fft_applied=True)
+                draw_profile(peak, fig, ax_rel, fft_applied=True,
+                             paper_plots=paper_plots)
 
                 ax_rel.plot(np.arange(-peak.fft.num_padding[0],
                                       len(peak.fft.f) - peak.fft.num_padding[0]
@@ -403,10 +435,12 @@ def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
             os.makedirs(output_path_sub, exist_ok=True)
 
             fig, axis = plt.subplots()
-            line, = draw_profile(peak, fig, axis, fft_applied=True)
+            line, = draw_profile(peak, fig, axis, fft_applied=True,
+                                 paper_plots=paper_plots)
             line.set_label(None)
             # for i in np.arange(len(peak.fft.fhat)):
-            for i in np.arange(min(len(peak.fft.fhat), 20)):
+            for i in np.arange(min(len(peak.fft.fhat),
+                                   10 if paper_plots else 20)):
                 indices = np.zeros(len(peak.fft.fhat))
                 indices[i] = 1
                 f_reverse_filtered = np.fft.irfft(indices * peak.fft.fhat,
@@ -430,7 +464,7 @@ def create_FFT_analysis_plots(peaks, output_path, output_format='svg',
 
 
 def create_profile_plots(peaks, output_path, output_format='svg',
-                         verbose=False):
+                         verbose=False, paper_plots=False):
     """ Creates and save the peak profiles for the given peaks.
 
     Parameters
@@ -445,6 +479,9 @@ def create_profile_plots(peaks, output_path, output_format='svg',
         matplotlib documentation for supported values.
     verbose : bool (default: False)
         Print information to console when set to True.
+    paper_plots : bool (default: False)
+        Use specific plot settings when set to True to improve quality when
+        embedding the plots into a Latex document.
     """
 
     if len(peaks) == 0:
@@ -463,7 +500,7 @@ def create_profile_plots(peaks, output_path, output_format='svg',
 
         fig, ax_rel = plt.subplots()
 
-        draw_profile(peak, fig, ax_rel)
+        draw_profile(peak, fig, ax_rel, paper_plots=paper_plots)
 
         fig.tight_layout()
 

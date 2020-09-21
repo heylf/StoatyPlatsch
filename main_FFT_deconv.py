@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from FFT.plotting import (create_deconv_profile_plots,
@@ -246,7 +247,7 @@ if __name__ == '__main__':
 
     if args.verbose:
         print("[NOTE] With the given parameters and input files the plots for"
-              " {} peaks will be created.".format(len(peaks_to_plot))
+              " {} peak(s) will be created.".format(len(peaks_to_plot))
               )
 
     # Switches for enabling or disabling creating specific plots.
@@ -254,11 +255,19 @@ if __name__ == '__main__':
     plot_fft_values = True
     plot_fft_transformations = True
 
+    # Switch for changing some plot styles to improve quality when embedding
+    # plots into a Latex document.
+    paper_plots = False
+    if paper_plots:
+        plt.rcParams.update({'font.size': 15})
+        args.plot_format = 'pdf'
+
     if plot_peak_profiles:
         create_profile_plots(peaks_to_plot,
                              os.path.join(args.output_folder, 'plot_profiles'),
                              output_format=args.plot_format,
-                             verbose=args.verbose
+                             verbose=args.verbose,
+                             paper_plots=paper_plots
                              )
 
     if args.fft_analysis:
@@ -271,7 +280,8 @@ if __name__ == '__main__':
             output_format=args.plot_format,
             plot_fft_values=plot_fft_values,
             plot_fft_transformations=plot_fft_transformations,
-            verbose=args.verbose
+            verbose=args.verbose,
+            paper_plots=paper_plots
             )
 
     deconvolute_with_FFT(peaks=peaks, num_padding=args.num_padding,
@@ -287,7 +297,8 @@ if __name__ == '__main__':
         peaks_to_plot,
         os.path.join(args.output_folder, 'plot_profiles_deconv'),
         output_format=args.plot_format,
-        verbose=args.verbose
+        verbose=args.verbose,
+        paper_plots=paper_plots
         )
 
     _file_path_overview, _file_path_summits, file_path_all_peaks = \
