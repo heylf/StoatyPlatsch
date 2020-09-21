@@ -286,12 +286,12 @@ def deconvolute_with_FFT(peaks, num_padding, approach='map_FFT_signal',
             # the peak profile. The result defines the number of considered
             # frequencies.
 
-            if max(peak.fft.f) < height:
-                height = max(peak.fft.f)
-
             peak.fft.local_maxs = \
                 signal.find_peaks(peak.fft.f, distance=distance,
-                                  height=[height],
+                                  height=[max(peak.fft.f)
+                                          if max(peak.fft.f) < height
+                                          else height
+                                          ],
                                   prominence=prominence
                                   )[0]
 
