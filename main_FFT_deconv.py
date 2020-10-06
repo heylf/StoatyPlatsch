@@ -135,11 +135,11 @@ if __name__ == '__main__':
         )
     parser.add_argument(
         "--height",
-        default=10,
+        default=5,
         help=("Used as parameter for function 'find_peaks' when calculating"
               " the maxima of the original profile. Only used for the"
               " 'map_profile' and the 'map_FFT_signal' approaches."
-              "  (default: 10)"),
+              "  (default: 5)"),
         type=int
         )
     parser.add_argument(
