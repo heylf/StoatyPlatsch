@@ -1,4 +1,5 @@
 
+from distutils.version import StrictVersion
 import os
 
 import matplotlib
@@ -103,6 +104,15 @@ def create_deconv_profile_figure(peak, paper_plots=False):
     fig = plt.figure(figsize=figsize, constrained_layout=True)
 
     gs = fig.add_gridspec(row_count+1, 1)    # +1 for additional space
+    if StrictVersion(matplotlib.__version__) >= StrictVersion('3.3.0'):
+        # Workaround for a bug in newer matplotlib version (only tested with
+        # version 3.3.3; workaround was not necessary in version 3.2.2).
+        # Creating a subplot on multiple rows of the GridSpec as first subplot
+        # resulted in errors when applying constrained_layout. Creating an
+        # invisible and unused Axes on a single row first solves this issue.
+        ax_tmp = fig.add_subplot(gs[0, :])
+        ax_tmp.set_visible(False)
+
     ax_rel = fig.add_subplot(gs[:row_count_subfig1, :])
     ax_subpeaks = fig.add_subplot(gs[-row_count_subfig2:, :])
 
