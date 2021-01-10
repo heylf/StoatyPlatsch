@@ -95,3 +95,13 @@ class Peak(object):
         self.peak_length = peak_length
         self.coverage = coverage
         self.peak_number = peak_number
+
+    def __repr__(self):
+        """ Returns a representation of the peak.
+
+        Returns
+        -------
+        result : str
+            The representation of the peak.
+        """
+        return '{}:{}-{}'.format(self.chrom, self.chrom_start, self.chrom_end)
