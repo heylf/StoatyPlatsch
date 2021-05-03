@@ -7,15 +7,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from FFT.plotting import (create_deconv_profile_plots,
-                          create_FFT_analysis_plots, create_profile_plots)
+                          create_FFT_analysis_plots, create_profile_plots,
+                          create_deconv_profile_presentation_plots)
 from FFT.postprocessing import (create_output_files,
                                 refine_peaks_with_annotations)
-from FFT.preprocessing import create_coverage_file, read_coverage_file
+from FFT.preprocessing import read_coverage_file
 from FFT.processing import analyze_with_FFT, deconvolute_with_FFT
+from tools.preprocessing import create_coverage_file
 
 
-if __name__ == '__main__':
+def create_argument_parser():
+    """ Creates the argument parser for parsing the program arguments.
 
+    Returns
+    -------
+    parser : ArgumentParser
+        The argument parser for parsing the program arguments.
+    """
     parser = argparse.ArgumentParser(
         description=("Deconvolutes the given peak profiles with a FFT"
                      " approach."),
@@ -199,6 +207,19 @@ if __name__ == '__main__':
         help=("The file format which is used for saving the plots. See"
               " matplotlib documentation for supported values.")
         )
+    parser.add_argument(
+        "--paper_plots",
+        action='store_true',
+        help=("Activates some plot style changes and other modifications,"
+              " for creating plots that should be embedded in a LaTeX paper.")
+        )
+    parser.add_argument(
+        "--presentation_plots",
+        action='store_true',
+        help=("Activates some plot style changes and other modifications,"
+              " for creating plots that should be embedded in a LaTeX"
+              " presentation.")
+        )
 
     # Optional arguments for annotations
     parser.add_argument(
@@ -210,6 +231,12 @@ if __name__ == '__main__':
         metavar='<bed>',
         help="Path to the exon boundary file.")
 
+    return parser
+
+
+if __name__ == '__main__':
+
+    parser = create_argument_parser()
     args = parser.parse_args()
 
     if args.verbose:
@@ -255,19 +282,15 @@ if __name__ == '__main__':
     plot_fft_values = True
     plot_fft_transformations = True
 
-    # Switch for changing some plot styles to improve quality when embedding
-    # plots into a Latex document.
-    paper_plots = False
-    if paper_plots:
+    if args.paper_plots or args.presentation_plots:
         plt.rcParams.update({'font.size': 15})
-        args.plot_format = 'pdf'
 
     if plot_peak_profiles:
         create_profile_plots(peaks_to_plot,
                              os.path.join(args.output_folder, 'plot_profiles'),
                              output_format=args.plot_format,
                              verbose=args.verbose,
-                             paper_plots=paper_plots
+                             paper_plots=args.paper_plots
                              )
 
     if args.fft_analysis:
@@ -281,7 +304,8 @@ if __name__ == '__main__':
             plot_fft_values=plot_fft_values,
             plot_fft_transformations=plot_fft_transformations,
             verbose=args.verbose,
-            paper_plots=paper_plots
+            paper_plots=args.paper_plots,
+            presentation_plots=args.presentation_plots
             )
 
     deconvolute_with_FFT(peaks=peaks, num_padding=args.num_padding,
@@ -298,7 +322,16 @@ if __name__ == '__main__':
         os.path.join(args.output_folder, 'plot_profiles_deconv'),
         output_format=args.plot_format,
         verbose=args.verbose,
-        paper_plots=paper_plots
+        paper_plots=args.paper_plots
+        )
+    if args.presentation_plots:
+        create_deconv_profile_presentation_plots(
+            peaks_to_plot,
+            os.path.join(args.output_folder,
+                         'plot_profiles_deconv_presentation'),
+            output_format=args.plot_format,
+            verbose=args.verbose,
+            paper_plots=args.paper_plots
         )
 
     _file_path_overview, _file_path_summits, file_path_all_peaks = \

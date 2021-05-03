@@ -72,7 +72,7 @@ class Peak(object):
 
     References
     ----------
-    For the description of the the attributes (except for 'fft') see also:
+    For the description of the attributes (except for 'fft') see also:
     .. [1] https://en.wikipedia.org/wiki/BED_(file_format)
     .. [2] https://bedtools.readthedocs.io/en/latest/content/tools/coverage.html    # @IgnorePep8
     .. [3] https://genome.ucsc.edu/FAQ/FAQformat#format1
@@ -104,4 +104,6 @@ class Peak(object):
         result : str
             The representation of the peak.
         """
-        return '{}:{}-{}'.format(self.chrom, self.chrom_start, self.chrom_end)
+        return 'Peak ID {} ({}:{}-{})'.format(
+            self.peak_number - 1, self.chrom, self.chrom_start+1,
+            self.chrom_end)

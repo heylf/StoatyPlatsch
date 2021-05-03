@@ -171,7 +171,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create 1st intersection. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         tmp_file_2 = os.path.join(output_path, "tmp_gene_2.bed")
         cmd = "bedtools intersect -s -v -a {} -b {} > {}".format(
@@ -179,13 +179,13 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create 2nd intersection. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         cmd = "cat {} {} > {}".format(tmp_file_1, tmp_file_2,
                                       output_file_new_peaks_gene)
         if verbose:
             print("[NOTE] ... Concatenate files. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         output_file_new_peaks_sorted = os.path.join(
             output_path,
@@ -196,7 +196,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create sorted result. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         if remove_tmp_files:
             if verbose:
@@ -230,7 +230,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create 1st intersection. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         tmp_file_2 = os.path.join(output_path, "tmp_exon_2.bed")
         cmd = "bedtools intersect -s -v -a {} -b {} > {}".format(
@@ -239,13 +239,13 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create 2nd intersection. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         cmd = "cat {} {} > {}".format(tmp_file_1, tmp_file_2,
                                       output_file_new_peaks)
         if verbose:
             print("[NOTE] ... Concatenate files. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         output_file_new_peaks_sorted = os.path.join(
             output_path,
@@ -258,7 +258,7 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
             )
         if verbose:
             print("[NOTE] ... Create sorted result. Cmd: {}".format(cmd))
-        sb.Popen(cmd, shell=True).wait()
+        sb.call(cmd, shell=True)
 
         if remove_tmp_files:
             if verbose:
