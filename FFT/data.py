@@ -45,7 +45,7 @@ class Peak(object):
     chrom_start : int
         The start coordinate on the chromosome (zero-based).
     chrom_end : int
-        The end coordinate on the chromosome  (zero-based, non-inclusive).
+        The end coordinate on the chromosome (zero-based, non-inclusive).
     name : str
         The name of the line in the BED file.
     score : int

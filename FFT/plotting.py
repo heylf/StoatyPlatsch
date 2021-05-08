@@ -62,11 +62,11 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
 
     ax_abs = \
         ax_rel.secondary_xaxis(location='top',
-                               functions=(lambda x: x + peak.chrom_start,
-                                          lambda x: x - peak.chrom_start)
+                               functions=(lambda x: x + peak.chrom_start + 1,
+                                          lambda x: x - peak.chrom_start - 1)
                                )
     ax_abs.set_xlabel('Absolute Nucleotide Position',)
-    ax_abs.set_xticks([peak.chrom_start, peak.chrom_end - 1])
+    ax_abs.set_xticks([peak.chrom_start + 1, peak.chrom_end])
     #  Disable scientific notation.
     ax_abs.ticklabel_format(useOffset=False, style='plain')
 
@@ -76,8 +76,7 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
     return lines
 
 
-def create_deconv_profile_figure(peak, paper_plots=False,
-                                 hide_subpeaks=False,):
+def create_deconv_profile_figure(peak, paper_plots=False, hide_subpeaks=False):
     """ Creates figure of the peak profile and deconvoluted peaks.
 
     Parameters
@@ -162,16 +161,16 @@ def create_deconv_profile_figure(peak, paper_plots=False,
         ax_rel.set_xlim(min(subpeaks_left) - 1 - peak.chrom_start,
                         ax_rel.get_xlim()[1])
 
-    ax_subpeaks.set_xlim((ax_rel.get_xlim()[0] + peak.chrom_start,
-                          ax_rel.get_xlim()[1] + peak.chrom_start))
+    ax_subpeaks.set_xlim((ax_rel.get_xlim()[0] + peak.chrom_start + 1,
+                          ax_rel.get_xlim()[1] + peak.chrom_start + 1))
     ax_subpeaks.barh(y=subpeaks_names,
                      width=subpeaks_center - subpeaks_left,
-                     left=subpeaks_left,
+                     left=subpeaks_left + 1,
                      color="C0" if not hide_subpeaks else 'white',
                      linewidth=1, edgecolor=color)
     ax_subpeaks.barh(y=subpeaks_names,
                      width=subpeaks_right - subpeaks_center,
-                     left=subpeaks_center,
+                     left=subpeaks_center + 1,
                      color="C0" if not hide_subpeaks else 'white',
                      linewidth=1, edgecolor=color)
     ax_subpeaks.set_xlabel('Absolute Nucleotide Position',

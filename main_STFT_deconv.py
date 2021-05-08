@@ -3,11 +3,16 @@ import argparse
 import os
 import sys
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-from FFT.plotting import create_profile_plots
-from FFT.preprocessing import create_coverage_file, read_coverage_file
+from STFT.processing import deconvolute_peaks_with_STFT
+from tools.plotting import create_deconv_profile_plots, create_profile_plots
+from tools.postprocessing import (create_output_files,
+                                  refine_peaks_with_annotations)
+from tools.preprocessing import (add_transcript_annotations,
+                                 create_coverage_file, read_coverage_file)
 
 
 def create_argument_parser():
@@ -98,6 +103,34 @@ def create_argument_parser():
         help=("The file format which is used for saving the plots. See"
               " matplotlib documentation for supported values.")
         )
+    parser.add_argument(
+        "--paper_plots",
+        action='store_true',
+        help=("Activates some plot style changes and other modifications,"
+              " for creating plots that should be embedded in a LaTeX paper.")
+        )
+
+    # Optional arguments for annotations
+    parser.add_argument(
+        "--transcript_file",
+        metavar='<gtf>',
+        help="Path to the transcript annotation file.")
+    parser.add_argument(
+        "--exon_peak_boundary_distance",
+        default=10,
+        help=("Defines the distance between peak and exon boundaries, in"
+              " which peaks should still be considered for refinement,"
+              " although the peak is not overlapping with the exon boundary."),
+        type=int
+        )
+    parser.add_argument(
+        "--gene_file",
+        metavar='<bed>',
+        help="Path to the gene annotation file.")
+    parser.add_argument(
+        "--exon_file",
+        metavar='<bed>',
+        help="Path to the exon boundary file.")
 
     return parser
 
@@ -128,6 +161,15 @@ if __name__ == '__main__':
                                  args.verbose)
     peaks = read_coverage_file(args.input_coverage_file, args.verbose)
 
+    if args.transcript_file:
+        transcripts, exons, peaks = \
+            add_transcript_annotations(
+                peaks=peaks, transcript_file=args.transcript_file,
+                output_path=os.path.join(args.output_folder,
+                                         '00_transcript_annotations'),
+                exon_peak_boundary_distance=args.exon_peak_boundary_distance,
+                verbose=args.verbose)
+
     # Determine which peaks should be plotted.
     if args.plot_peak_ids is not None:
         peak_ids_to_plot = np.unique(args.plot_peak_ids)
@@ -147,20 +189,35 @@ if __name__ == '__main__':
     # Switches for enabling or disabling creating specific plots.
     plot_peak_profiles = True
 
-    # Switch for changing some plot styles to improve quality when embedding
-    # plots into a Latex document.
-    paper_plots = False
-    if paper_plots:
+    mpl.use('Agg')    # To speed up creating the plots.
+
+    if args.paper_plots:
         plt.rcParams.update({'font.size': 15})
-        args.plot_format = 'pdf'
 
     if plot_peak_profiles:
         create_profile_plots(peaks_to_plot,
                              os.path.join(args.output_folder, 'plot_profiles'),
                              output_format=args.plot_format,
                              verbose=args.verbose,
-                             paper_plots=paper_plots
+                             paper_plots=args.paper_plots
                              )
+
+    deconvolute_peaks_with_STFT(peaks=peaks, verbose=args.verbose)
+
+    create_deconv_profile_plots(
+        peaks_to_plot,
+        os.path.join(args.output_folder, 'plot_profiles_deconv'),
+        output_format=args.plot_format,
+        verbose=args.verbose,
+        paper_plots=args.paper_plots
+        )
+
+    file_path_all_peaks = \
+        create_output_files(peaks, args.output_folder, args.verbose)
+
+    refine_peaks_with_annotations(file_path_all_peaks,
+                                  args.gene_file, args.exon_file,
+                                  args.output_folder, verbose=args.verbose)
 
     if args.verbose:
         print("[FINISH]")

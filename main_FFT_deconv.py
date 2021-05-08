@@ -9,10 +9,10 @@ import numpy as np
 from FFT.plotting import (create_deconv_profile_plots,
                           create_FFT_analysis_plots, create_profile_plots,
                           create_deconv_profile_presentation_plots)
-from FFT.postprocessing import (create_output_files,
-                                refine_peaks_with_annotations)
+from FFT.postprocessing import create_output_files
 from FFT.preprocessing import read_coverage_file
 from FFT.processing import analyze_with_FFT, deconvolute_with_FFT
+from tools.postprocessing import refine_peaks_with_annotations
 from tools.preprocessing import create_coverage_file
 
 
