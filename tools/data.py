@@ -158,6 +158,17 @@ class UnrefinedPeak(object):
         return 'Unrefined Peak ID {} ({}:{}-{})'.format(
             self.peak_id, self.seqname, self.start+1, self.end)
 
+    @property
+    def peak_length(self):
+        """ Returns the length of the peak.
+
+        Returns
+        -------
+        result : int
+            The length of the peak .
+        """
+        return len(self.coverage)
+
     def deconv_peaks_to_bed_entries(self, bed_peak_id):
         """ Returns the deconvoluted peaks as BED entries.
 
@@ -441,6 +452,18 @@ class RefinedPeak(object):
         inner_part = inner_part[:-3]
         result = 'Refined Peak ID {} ({})'.format(self.peak_id, inner_part)
         return result
+
+    @property
+    def peak_length(self):
+        """ Returns the length of the whole refined peak.
+
+        Returns
+        -------
+        result : int
+            The length of the peak after separated segments have been
+            concatenated.
+        """
+        return len(self.coverage)
 
     @property
     def coverage(self):

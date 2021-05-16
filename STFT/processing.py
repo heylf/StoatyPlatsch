@@ -4,7 +4,7 @@ import scipy.signal
 
 
 def deconvolute_peak_with_STFT(peak, stft_args):
-    """ Deconolvutes the given peak with the given parameters.
+    """ Deconvolutes the given peak with the given parameters.
 
     Parameters
     ----------
@@ -12,9 +12,18 @@ def deconvolute_peak_with_STFT(peak, stft_args):
         The peak that should be deconvoluted.
     stft_args : dict
         The parameters that should be used for the calculation of the STFT.
+
+    Returns
+    -------
+    stft_f : np.ndarray
+        Array with the sample frequencies.
+    stft_t : np.ndarray
+        Array with the segment times.
+    Zxx : np.ndarray
+        The STFT of the peak.
     """
 
-    stft_f, _stft_t, Zxx = scipy.signal.stft(**stft_args)
+    stft_f, stft_t, Zxx = scipy.signal.stft(**stft_args)
 
     istft_args = {}
     istft_args['fs'] = stft_args['fs']
@@ -64,8 +73,9 @@ def deconvolute_peak_with_STFT(peak, stft_args):
 
         _istft_t, istft_x = scipy.signal.istft(**istft_args)
 
-        center = istft_x.argmax()
+        padding_left = (len(stft_args['x']) - len(peak.coverage)) // 2
 
+        center = istft_x.argmax() - padding_left
         if center >= len(peak.coverage):
             # Can happen, as input can be extended to the left when applying
             # stft.
@@ -96,6 +106,8 @@ def deconvolute_peak_with_STFT(peak, stft_args):
         peak.deconv_peaks_rel.append(
             [0, np.round(len(peak.coverage)/2).astype(int), len(peak.coverage)]
             )
+
+    return stft_f, stft_t, Zxx
 
 
 def deconvolute_peaks_with_STFT(peaks, verbose=False):

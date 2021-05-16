@@ -38,8 +38,7 @@ def draw_profile(peak, _fig, ax_rel, paper_plots=False):
     x_values = np.arange(len(peak.coverage))
     y_values = peak.coverage
     lines = ax_rel.plot(x_values, y_values,
-                        label='{}'.format(peak),
-                        linewidth=1, marker='.')
+                        label='{}'.format(peak), linewidth=1, marker='.')
     ax_rel.set_xlabel('Relative Nucleotide Position')
     ax_rel.set_ylabel('Coverage')
     for ax in [ax_rel.xaxis, ax_rel.yaxis]:
