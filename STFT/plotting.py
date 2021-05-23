@@ -44,13 +44,18 @@ class PeakAnalyzer(object):
     the different figures and axes.
     """
 
-    def __init__(self, peaks, verbose=False, create_additional_plots=False):
+    def __init__(self, peaks, init_peak_ID=None, verbose=False,
+                 create_additional_plots=False, postpone_show=False):
         """ Constructor
 
         Parameters
         ----------
-        create_additional_plots : bool
+        init_peak_ID : int
+            Sets the peak that should be plotted initially.
+        create_additional_plots : bool (default: False)
             If True, create additional plots.
+        postpone_show : bool (default: False)
+            Do not show plots directly, if set to True.
 
         See attributes description of the class for other parameters.
         """
@@ -63,9 +68,11 @@ class PeakAnalyzer(object):
         if create_additional_plots:
             self._create_additional_fig()
 
-        self.s_peakid_changed(self.s_peakid.val)
+        self.s_peakid_changed(init_peak_ID if init_peak_ID
+                              else self.s_peakid.val)
 
-        plt.show()
+        if not postpone_show:
+            plt.show()
 
     def reset_textbox_events(self, tb):
         """ Resets events for the given TextBox, workaround for a bug.
@@ -128,10 +135,9 @@ class PeakAnalyzer(object):
             self.fig_controls.add_subplot(gs[16:18, :col_count_controls-1])
         self.ax_freq_option_val = \
             self.fig_controls.add_subplot(gs[19, :col_count_controls-1])
-        self.ax_plot_options_r = \
-            self.fig_controls.add_subplot(gs[21:24, :col_count_controls*3])
-        self.ax_plot_options_c = \
-            self.fig_controls.add_subplot(
+        self.ax_plot_options_r = self.fig_controls.add_subplot(
+                gs[21:24, :np.ceil(col_count_controls*2.5).astype(int)])
+        self.ax_plot_options_c = self.fig_controls.add_subplot(
                 gs[25:28, :np.ceil(col_count_controls*3.5).astype(int)]
                 )
 
@@ -641,6 +647,8 @@ class PeakAnalyzer(object):
                 specto_stft_t, specto_stft_f, specto_Sxx, shading='gouraud')
 
         self.ax_freq.set_xlabel('Relative Nucleotide Position')
+        self.ax_freq.set_ylabel('Frequency')
+        self.ax_freq.set_zlabel('Coverage')
         x_values = np.arange(len(self.peak.coverage))
         z_values = self.peak.coverage
         self.ax_freq.plot(xs=x_values, ys=z_values, zdir='y',

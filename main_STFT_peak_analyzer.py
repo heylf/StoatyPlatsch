@@ -88,6 +88,11 @@ def create_argument_parser():
         action='store_true',
         help="Create additional plots."
         )
+    parser.add_argument(
+        "--init_peak_ID",
+        help=("Sets the peak that should be plotted initially."),
+        type=int
+        )
 
     return parser
 
@@ -124,5 +129,6 @@ if __name__ == '__main__':
                 exon_peak_boundary_distance=args.exon_peak_boundary_distance,
                 verbose=args.verbose)
 
-    pa = PeakAnalyzer(peaks=peaks, verbose=args.verbose,
+    pa = PeakAnalyzer(peaks=peaks, init_peak_ID=args.init_peak_ID,
+                      verbose=args.verbose,
                       create_additional_plots=args.create_additional_plots)
