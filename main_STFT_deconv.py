@@ -3,10 +3,11 @@ import argparse
 import os
 import sys
 
-import matplotlib as mpl
+# import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
+from evaluation.evaluate_results import prepare_context_for_plots
 from STFT.processing import deconvolute_peaks_with_STFT
 from tools.plotting import create_deconv_profile_plots, create_profile_plots
 from tools.postprocessing import (create_output_files,
@@ -135,6 +136,20 @@ def create_argument_parser():
     return parser
 
 
+def evaluate_peak_lengths(eval_params_peak_lengths, fill_gaps=False):
+    eppl = eval_params_peak_lengths  # Abbreviation
+
+    fig, ax = plt.subplots()
+    for label, distribution in eppl.items():
+        lengths, values = prepare_context_for_plots(distribution, fill_gaps)
+        ax.plot(lengths, values, alpha=0.7, label=label, linestyle='--',
+                marker='.')
+
+    fig.tight_layout()
+    fig.legend()
+    fig.show()
+
+
 if __name__ == '__main__':
 
     parser = create_argument_parser()
@@ -187,9 +202,21 @@ if __name__ == '__main__':
               )
 
     # Switches for enabling or disabling creating specific plots.
-    plot_peak_profiles = True
+    plot_peak_profiles = False
+    plot_deconv_profiles = False
+    calc_eval_params = True
 
-    mpl.use('Agg')    # To speed up creating the plots.
+    if calc_eval_params:
+        eval_params_peak_lengths = {
+            'unmodified': {},
+            'to_be_clipped': {},
+            'after_clipped': {},
+            'final_all': {}
+            }
+    else:
+        eval_params_peak_lengths = None
+
+    # mpl.use('Agg')    # To speed up creating the plots.
 
     if args.paper_plots:
         plt.rcParams.update({'font.size': 15})
@@ -202,15 +229,19 @@ if __name__ == '__main__':
                              paper_plots=args.paper_plots
                              )
 
-    deconvolute_peaks_with_STFT(peaks=peaks, verbose=args.verbose)
-
-    create_deconv_profile_plots(
-        peaks_to_plot,
-        os.path.join(args.output_folder, 'plot_profiles_deconv'),
-        output_format=args.plot_format,
-        verbose=args.verbose,
-        paper_plots=args.paper_plots
+    deconvolute_peaks_with_STFT(
+        peaks=peaks, verbose=args.verbose,
+        eval_params_peak_lengths=eval_params_peak_lengths
         )
+
+    if plot_deconv_profiles:
+        create_deconv_profile_plots(
+            peaks_to_plot,
+            os.path.join(args.output_folder, 'plot_profiles_deconv'),
+            output_format=args.plot_format,
+            verbose=args.verbose,
+            paper_plots=args.paper_plots
+            )
 
     file_path_all_peaks = \
         create_output_files(peaks, args.output_folder, args.verbose)
@@ -221,3 +252,11 @@ if __name__ == '__main__':
 
     if args.verbose:
         print("[FINISH]")
+
+    if eval_params_peak_lengths:
+        if args.verbose:
+            print("[NOTE] Additional evaluation calculations.")
+        evaluate_peak_lengths(eval_params_peak_lengths)
+        evaluate_peak_lengths(eval_params_peak_lengths, fill_gaps=True)
+        if args.verbose:
+            print("[FINISH] Now for real!")

@@ -3,7 +3,7 @@ import numpy as np
 import scipy.signal
 
 
-def deconvolute_peak_with_STFT(peak, stft_args):
+def deconvolute_peak_with_STFT(peak, stft_args, eval_params_peak_lengths=None):
     """ Deconvolutes the given peak with the given parameters.
 
     Parameters
@@ -12,6 +12,9 @@ def deconvolute_peak_with_STFT(peak, stft_args):
         The peak that should be deconvoluted.
     stft_args : dict
         The parameters that should be used for the calculation of the STFT.
+    eval_params_peak_lengths : dict (default: None)
+        If a dictionary is passed, additional parameters for an evaluation are
+        calculated.
 
     Returns
     -------
@@ -98,10 +101,35 @@ def deconvolute_peak_with_STFT(peak, stft_args):
         right_boundary = min(center + distance_center_min + 1,
                              len(peak.coverage))
 
+        if eval_params_peak_lengths:
+            eppl = eval_params_peak_lengths  # Abbreviation
+            unmodified_length = distance_center_min * 2 + 1
+            if not eppl['unmodified'].get(unmodified_length):
+                eppl['unmodified'][unmodified_length] = 1
+            else:
+                eppl['unmodified'][unmodified_length] += 1
+            actual_length = right_boundary - left_boundary
+            if unmodified_length != actual_length:
+                if not eppl['to_be_clipped'].get(unmodified_length):
+                    eppl['to_be_clipped'][unmodified_length] = 1
+                else:
+                    eppl['to_be_clipped'][unmodified_length] += 1
+                if not eppl['after_clipped'].get(actual_length):
+                    eppl['after_clipped'][actual_length] = 1
+                else:
+                    eppl['after_clipped'][actual_length] += 1
+            if not eppl['final_all'].get(actual_length):
+                eppl['final_all'][actual_length] = 1
+            else:
+                eppl['final_all'][actual_length] += 1
+
         peak.deconv_peaks_rel.append([left_boundary, center, right_boundary])
         peaks_defined += 1
 
     if not peak.deconv_peaks_rel:
+        if eval_params_peak_lengths:
+            raise ValueError("Attention, special case! Not conisdered yet!")
+
         # If peak could not be deconvoluted, keep original peak.
         peak.deconv_peaks_rel.append(
             [0, np.round(len(peak.coverage)/2).astype(int), len(peak.coverage)]
@@ -110,7 +138,8 @@ def deconvolute_peak_with_STFT(peak, stft_args):
     return stft_f, stft_t, Zxx
 
 
-def deconvolute_peaks_with_STFT(peaks, verbose=False):
+def deconvolute_peaks_with_STFT(peaks, verbose=False,
+                                eval_params_peak_lengths=None):
     """ Deconvolutes the given peaks with a STFT approach.
 
     Parameters
@@ -119,6 +148,8 @@ def deconvolute_peaks_with_STFT(peaks, verbose=False):
         The dictionary containing the peaks that should be deconvoluted.
     verbose : bool (default: False)
         Print information to console when set to True.
+    eval_params_peak_lengths : dict (default: None)
+        Extract some additional evaluation parameters used for the thesis.
     """
     if verbose:
         print("[NOTE] Deconvolute peaks with STFT.")
@@ -155,4 +186,4 @@ def deconvolute_peaks_with_STFT(peaks, verbose=False):
                                        ).astype(int)
         stft_args['noverlap'] = min(10, stft_args['nperseg']-1)
 
-        deconvolute_peak_with_STFT(peak, stft_args)
+        deconvolute_peak_with_STFT(peak, stft_args, eval_params_peak_lengths)

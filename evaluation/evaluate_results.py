@@ -7,6 +7,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from tools.postprocessing import read_fasta_file
+
 
 class EvaluationResult(object):
     """ Stores the result of the evaluation.
@@ -100,24 +102,7 @@ class Evaluation(object):
         verbose : bool (default: False)
             Print information to console when set to True.
         """
-        if verbose:
-            print("[NOTE] Read the fasta file from '{}'."
-                  .format(self.fasta_file_path))
-
-        with open(self.fasta_file_path, "r") as fasta_file:
-            key = None
-            data = ""
-            self.fasta_data = {}
-            for line in fasta_file:
-                if line.startswith(">"):
-                    if key is not None:
-                        self.fasta_data[key] = data.upper().replace('T', 'U')
-                    key = line[1:].strip()
-                    data = ""
-                else:
-                    data += line.strip()
-            if data:
-                self.fasta_data[key] = data.upper().replace('T', 'U')
+        self.fasta_data = read_fasta_file(self.fasta_file_path, verbose)
 
     def evaluate_fasta_data(self):
         """ Evaluates the fasta data. """
@@ -302,9 +287,44 @@ def init_evaluations(protein='RBFOX2'):
     return evaluations
 
 
+def prepare_context_for_plots(values, fill_gaps=False):
+    """ Prepares the given context values for plotting.
+
+    Parameters
+    ----------
+    values : dict
+        Dictionary containing the context information.
+    fill_gaps : bool (default: False)
+        Defines if length values without number values should be filled with
+        value 0.
+
+    Returns
+    -------
+    context_lengths : list
+        List with the length values of the context distribution.
+    context_values : list
+        List with the number values of the context distribution.
+    """
+    context_lengths = []
+    context_values = []
+    if fill_gaps:
+        last_length = -1
+    for length, value in sorted(values.items()):
+        if fill_gaps:
+            while (last_length + 1) < length:
+                last_length += 1
+                context_lengths.append(last_length)
+                context_values.append(0)
+            last_length = length
+        context_lengths.append(length)
+        context_values.append(value)
+    return context_lengths, context_values
+
+
 def create_motif_context_plot(evaluations, tags, motif, motif_no,
                               context_name, context_type,
-                              output_path, output_format='svg'):
+                              output_path, output_format='svg',
+                              fill_gaps=False):
     """ Creates and saves the distribution plot for the given motif context.
 
     Parameters
@@ -329,6 +349,9 @@ def create_motif_context_plot(evaluations, tags, motif, motif_no,
     output_format : str (default: 'svg')
         The file format which should be used for saving the figures. See
         matplotlib documentation for supported values.
+    fill_gaps : bool (default: False)
+        Defines if length values without number values should be filled with
+        value 0.
     """
 
     os.makedirs(output_path, exist_ok=True)
@@ -339,12 +362,9 @@ def create_motif_context_plot(evaluations, tags, motif, motif_no,
             continue
         contexts = getattr(evaluation.result, context_name)
         values = contexts[context_type][motif]
-        context_length = []
-        context_value = []
-        for length, value in sorted(values.items()):
-            context_length.append(length)
-            context_value.append(value)
-        ax.plot(context_length, context_value, alpha=alpha, **tags[tag])
+        context_lengths, context_values = \
+            prepare_context_for_plots(values, fill_gaps=fill_gaps)
+        ax.plot(context_lengths, context_values, alpha=alpha, **tags[tag])
 
     ax.legend()
     ax.set_xlabel('Number of context base pairs')
@@ -361,7 +381,7 @@ def create_motif_context_plot(evaluations, tags, motif, motif_no,
 
 
 def create_motif_context_plots(evaluations, output_path, output_format='svg',
-                               protein='RBFOX2'):
+                               protein='RBFOX2', fill_gaps=False):
     """ Creates and saves the distribution plots for the motif contexts.
 
     Parameters
@@ -376,6 +396,9 @@ def create_motif_context_plots(evaluations, output_path, output_format='svg',
         matplotlib documentation for supported values.
     protein : str, (default: 'RBFOX2')
         Defines the target of the evaluation.
+    fill_gaps : bool (default: False)
+        Defines if length values without number values should be filled with
+        value 0.
     """
 
     os.makedirs(output_path, exist_ok=True)
@@ -395,12 +418,8 @@ def create_motif_context_plots(evaluations, output_path, output_format='svg',
         for context_information in [evaluation.result.contexts['all'],
                                     evaluation.result.contexts_re['all']]:
             for motif, values in context_information.items():
-                context_length = []
-                context_value = []
-                for length, value in sorted(values.items()):
-                    context_length.append(length)
-                    context_value.append(value)
-
+                context_length, context_value = \
+                    prepare_context_for_plots(values, fill_gaps)
                 ax.plot(context_length, context_value, label=motif,
                         alpha=alpha)
 
@@ -438,7 +457,7 @@ def create_motif_context_plots(evaluations, output_path, output_format='svg',
                     evaluations=evaluations, tags=tags, motif=motif,
                     motif_no=motif_no, context_name=context_name,
                     context_type=context_type, output_path=output_path,
-                    output_format=output_format)
+                    output_format=output_format, fill_gaps=fill_gaps)
                 motif_no += 1
 
     for context_type in ['all', 'motif']:
@@ -447,11 +466,8 @@ def create_motif_context_plots(evaluations, output_path, output_format='svg',
             if tag not in tags:
                 continue
             values = evaluation.result.contexts['combined'][context_type]
-            context_length = []
-            context_value = []
-            for length, value in sorted(values.items()):
-                context_length.append(length)
-                context_value.append(value)
+            context_length, context_value = \
+                prepare_context_for_plots(values, fill_gaps)
             ax.plot(context_length, context_value, alpha=alpha, **tags[tag])
         ax.legend()
         ax.set_xlabel('Number of context base pairs')
@@ -466,7 +482,7 @@ def create_motif_context_plots(evaluations, output_path, output_format='svg',
 
 
 def save_results(evaluations, output_path, output_format='svg',
-                 protein='RBFOX2'):
+                 protein='RBFOX2', fill_gaps=False):
     """ Saves the evaluation results.
 
     Parameters
@@ -481,6 +497,9 @@ def save_results(evaluations, output_path, output_format='svg',
         matplotlib documentation for supported values.
     protein : str, (default: 'RBFOX2')
         Defines the target of the evaluation.
+    fill_gaps : bool (default: False)
+        Defines if length values without number values should be filled with
+        value 0.
     """
 
     os.makedirs(output_path, exist_ok=True)
@@ -520,7 +539,8 @@ def save_results(evaluations, output_path, output_format='svg',
     create_motif_context_plots(
         evaluations,
         output_path=os.path.join(output_path, 'context_distribution_plots'),
-        output_format=output_format, protein=protein
+        output_format=output_format, protein=protein,
+        fill_gaps=fill_gaps
         )
 
 
@@ -558,6 +578,12 @@ def create_argument_parser():
         help=("The file format which is used for saving the plots. See"
               " matplotlib documentation for supported values.")
         )
+    parser.add_argument(
+        "--fill_context_gaps",
+        action='store_true',
+        help=("Defines if length values without number values should be filled"
+              " with value 0.")
+        )
 
     return parser
 
@@ -584,4 +610,5 @@ if __name__ == '__main__':
     mpl.use('Agg')    # To speed up creating the plots.
 
     save_results(evaluations=evaluations, output_path=args.output_folder,
-                 output_format=args.plot_format, protein=args.protein)
+                 output_format=args.plot_format, protein=args.protein,
+                 fill_gaps=args.fill_context_gaps)

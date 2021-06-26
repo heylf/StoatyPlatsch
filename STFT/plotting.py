@@ -50,7 +50,7 @@ class PeakAnalyzer(object):
 
         Parameters
         ----------
-        init_peak_ID : int
+        init_peak_ID : int (default: None)
             Sets the peak that should be plotted initially.
         create_additional_plots : bool (default: False)
             If True, create additional plots.

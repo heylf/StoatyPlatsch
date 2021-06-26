@@ -13,7 +13,8 @@ import numpy as np
 matplotlib.rcParams["figure.figsize"] = [12, 8]
 
 
-def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
+def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False,
+                 show_ax_abs=True):
     """ Draws the profile plot for the peak on the given figure and axis.
 
     Parameters
@@ -31,6 +32,9 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
     paper_plots : bool (default: False)
         Use specific plot settings when set to True to improve quality when
         embedding the plots into a Latex document.
+    show_ax_abs : bool (default: True)
+        Enables or disables plotting the secondary axis with the absolute
+        nucleotide position.
 
     Returns
     -------
@@ -60,15 +64,16 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
                                        - peak.fft.num_padding[1] - 1,
                        color='grey', lw=1)
 
-    ax_abs = \
-        ax_rel.secondary_xaxis(location='top',
-                               functions=(lambda x: x + peak.chrom_start + 1,
-                                          lambda x: x - peak.chrom_start - 1)
-                               )
-    ax_abs.set_xlabel('Absolute Nucleotide Position',)
-    ax_abs.set_xticks([peak.chrom_start + 1, peak.chrom_end])
-    #  Disable scientific notation.
-    ax_abs.ticklabel_format(useOffset=False, style='plain')
+    if show_ax_abs:
+        ax_abs = ax_rel.secondary_xaxis(
+            location='top',
+            functions=(lambda x: x + peak.chrom_start + 1,
+                       lambda x: x - peak.chrom_start - 1)
+            )
+        ax_abs.set_xlabel('Absolute Nucleotide Position',)
+        ax_abs.set_xticks([peak.chrom_start + 1, peak.chrom_end])
+        #  Disable scientific notation.
+        ax_abs.ticklabel_format(useOffset=False, style='plain')
 
     if not paper_plots:
         ax_rel.legend()
@@ -76,7 +81,8 @@ def draw_profile(peak, _fig, ax_rel, fft_applied=False, paper_plots=False):
     return lines
 
 
-def create_deconv_profile_figure(peak, paper_plots=False, hide_subpeaks=False):
+def create_deconv_profile_figure(peak, paper_plots=False, hide_subpeaks=False,
+                                 show_ax_abs=True):
     """ Creates figure of the peak profile and deconvoluted peaks.
 
     Parameters
@@ -89,6 +95,9 @@ def create_deconv_profile_figure(peak, paper_plots=False, hide_subpeaks=False):
     hide_subpeaks : bool
         Hide the subpeaks by drawing all in 'white', thus preserving the
         layout. Used for creating the presentation plots.
+    show_ax_abs : bool (default: True)
+        Enables or disables plotting the secondary axis with the absolute
+        nucleotide position.
 
     Returns
     -------
@@ -132,7 +141,8 @@ def create_deconv_profile_figure(peak, paper_plots=False, hide_subpeaks=False):
         color = 'black'
         # ax_subpeaks.set_visible(False)
 
-    draw_profile(peak, fig, ax_rel, fft_applied=True, paper_plots=paper_plots)
+    draw_profile(peak, fig, ax_rel, fft_applied=True, paper_plots=paper_plots,
+                 show_ax_abs=show_ax_abs)
 
     subpeaks_names = np.empty(len(peak.fft.new_peaks), dtype=object)
     subpeaks_left = np.empty(len(peak.fft.new_peaks), dtype=int)
