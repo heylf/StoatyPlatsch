@@ -210,3 +210,36 @@ def refine_peaks_with_annotations(file_path_peaks, gene_file, exon_file,
                 print("[NOTE] ... Remove temporary files.")
             os.remove(tmp_file_1)
             os.remove(tmp_file_2)
+
+
+def read_fasta_file(fasta_file_path, verbose=False):
+    """ Reads and returns the data of the given fasta file.
+
+    Parameters
+    ----------
+    verbose : bool (default: False)
+        Print information to console when set to True.
+
+    Returns
+    -------
+    fasta_data : dict
+        Dictionary with the genomic data of the fasta file.
+    """
+    if verbose:
+        print("[NOTE] Read the fasta file from '{}'.".format(fasta_file_path))
+
+    fasta_data = {}
+    with open(fasta_file_path, "r") as fasta_file:
+        key = None
+        data = ""
+        for line in fasta_file:
+            if line.startswith(">"):
+                if key is not None:
+                    fasta_data[key] = data.upper().replace('T', 'U')
+                key = line[1:].strip()
+                data = ""
+            else:
+                data += line.strip()
+        if data:
+            fasta_data[key] = data.upper().replace('T', 'U')
+    return fasta_data
