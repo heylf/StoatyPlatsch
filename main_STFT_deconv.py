@@ -3,11 +3,10 @@ import argparse
 import os
 import sys
 
-# import matplotlib as mpl
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-from evaluation.evaluate_results import prepare_context_for_plots
 from STFT.processing import deconvolute_peaks_with_STFT
 from tools.plotting import create_deconv_profile_plots, create_profile_plots
 from tools.postprocessing import (create_output_files,
@@ -76,6 +75,53 @@ def create_argument_parser():
               " argument has no effect.")
         )
 
+    # Define arguments for configuring the deconvolution behavior.
+    parser.add_argument(
+        "--window",
+        default='boxcar',
+        help=("The STFT window parameter. See the SciPy documentation for the"
+              " STFT for possible values and description. (default: 'boxcar')"
+              ),
+        )
+    parser.add_argument(
+        "--detrend",
+        default='constant',
+        help=("The STFT detrend parameter. See the SciPy documentation for the"
+              " STFT for possible values and description."
+              " (default: 'constant')"),
+        )
+    parser.add_argument(
+        "--noverlap",
+        default=10,
+        help=("The STFT noverlap parameter. See the SciPy documentation for"
+              " the STFT for description. (default: 10)"),
+        type=int
+        )
+    parser.add_argument(
+        "--distance",
+        default=10,
+        help=("Used as parameter for function 'find_peaks' to estimate the"
+              " number of subpeaks that should be defined."
+              "  (default: 10)"),
+        type=int
+        )
+    parser.add_argument(
+        "--height",
+        default=5,
+        help=("Used as parameter for function 'find_peaks' to estimate the"
+              " number of subpeaks that should be defined."
+              "  (default: 5)"),
+        type=int
+        )
+    parser.add_argument(
+        "--prominence",
+        default=3,
+        help=("Used as parameter for function 'find_peaks' to estimate the"
+              " number of subpeaks that should be defined."
+              "  (default: 3)"),
+        type=int
+        )
+
     # Define arguments for configuring the plotting behavior.
     plot_group = parser.add_mutually_exclusive_group()
     plot_group.add_argument(
@@ -136,20 +182,6 @@ def create_argument_parser():
     return parser
 
 
-def evaluate_peak_lengths(eval_params_peak_lengths, fill_gaps=False):
-    eppl = eval_params_peak_lengths  # Abbreviation
-
-    fig, ax = plt.subplots()
-    for label, distribution in eppl.items():
-        lengths, values = prepare_context_for_plots(distribution, fill_gaps)
-        ax.plot(lengths, values, alpha=0.7, label=label, linestyle='--',
-                marker='.')
-
-    fig.tight_layout()
-    fig.legend()
-    fig.show()
-
-
 if __name__ == '__main__':
 
     parser = create_argument_parser()
@@ -202,9 +234,9 @@ if __name__ == '__main__':
               )
 
     # Switches for enabling or disabling creating specific plots.
-    plot_peak_profiles = False
-    plot_deconv_profiles = False
-    calc_eval_params = True
+    plot_peak_profiles = True
+    plot_deconv_profiles = True
+    calc_eval_params = False
 
     if calc_eval_params:
         eval_params_peak_lengths = {
@@ -216,7 +248,7 @@ if __name__ == '__main__':
     else:
         eval_params_peak_lengths = None
 
-    # mpl.use('Agg')    # To speed up creating the plots.
+    mpl.use('Agg')    # To speed up creating the plots.
 
     if args.paper_plots:
         plt.rcParams.update({'font.size': 15})
@@ -230,7 +262,14 @@ if __name__ == '__main__':
                              )
 
     deconvolute_peaks_with_STFT(
-        peaks=peaks, verbose=args.verbose,
+        peaks=peaks,
+        stft_window=args.window,
+        stft_detrend=args.detrend,
+        stft_noverlap=args.noverlap,
+        find_peaks_distance=args.distance,
+        find_peaks_height=args.height,
+        find_peaks_prominence=args.prominence,
+        verbose=args.verbose,
         eval_params_peak_lengths=eval_params_peak_lengths
         )
 
@@ -252,11 +291,3 @@ if __name__ == '__main__':
 
     if args.verbose:
         print("[FINISH]")
-
-    if eval_params_peak_lengths:
-        if args.verbose:
-            print("[NOTE] Additional evaluation calculations.")
-        evaluate_peak_lengths(eval_params_peak_lengths)
-        evaluate_peak_lengths(eval_params_peak_lengths, fill_gaps=True)
-        if args.verbose:
-            print("[FINISH] Now for real!")

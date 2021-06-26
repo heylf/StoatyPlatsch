@@ -138,7 +138,14 @@ def deconvolute_peak_with_STFT(peak, stft_args, eval_params_peak_lengths=None):
     return stft_f, stft_t, Zxx
 
 
-def deconvolute_peaks_with_STFT(peaks, verbose=False,
+def deconvolute_peaks_with_STFT(peaks,
+                                stft_window='boxcar',
+                                stft_detrend='constant',
+                                stft_noverlap=10,
+                                find_peaks_distance=10,
+                                find_peaks_height=5,
+                                find_peaks_prominence=3,
+                                verbose=False,
                                 eval_params_peak_lengths=None):
     """ Deconvolutes the given peaks with a STFT approach.
 
@@ -146,6 +153,21 @@ def deconvolute_peaks_with_STFT(peaks, verbose=False,
     ----------
     peaks : OrderedDict
         The dictionary containing the peaks that should be deconvoluted.
+    stft_window : str, tuple, array_like (default: 'boxcar')
+        The STFT window parameter.
+    stft_detrend : str, function, False (default: 'constant')
+        The STFT detrend parameter.
+    stft_noverlap : int (default: 10)
+        The STFT noverlap parameter.
+    find_peaks_distance : int (default: 10)
+        The distance parameter of function 'find_peaks' to estimate the number
+        of subpeaks that should be defined.
+    find_peaks_height : int (default: 5)
+        The height parameter of function 'find_peaks' to estimate the number
+        of subpeaks that should be defined.
+    find_peaks_prominence : int (default: 3)
+        The prominence parameter of function 'find_peaks' to estimate the
+        number of subpeaks that should be defined.
     verbose : bool (default: False)
         Print information to console when set to True.
     eval_params_peak_lengths : dict (default: None)
@@ -158,9 +180,9 @@ def deconvolute_peaks_with_STFT(peaks, verbose=False,
     stft_args = {}
     stft_args['fs'] = 1    # Should always be 1, as the sampling
     # frequency is always 1 value per nucleotide.
-    stft_args['window'] = 'boxcar'
+    stft_args['window'] = stft_window
     stft_args['nfft'] = None
-    stft_args['detrend'] = 'constant'
+    stft_args['detrend'] = stft_detrend
     stft_args['return_onesided'] = True    # Should always be True, as
     # input data is always real, therefore two-sided spectrum is symmetric
     # and one-sided result is sufficient.
@@ -170,20 +192,19 @@ def deconvolute_peaks_with_STFT(peaks, verbose=False,
 
     for peak in peaks.values():
 
-        distance = 10
-        height = 5
-        prominence = 3
         find_peaks_result = scipy.signal.find_peaks(
-            peak.coverage, distance=distance,
-            height=[max(peak.coverage) if max(peak.coverage) < height
-                    else height],
-            prominence=prominence)
+            peak.coverage, distance=find_peaks_distance,
+            height=[max(peak.coverage)
+                    if max(peak.coverage) < find_peaks_height
+                    else find_peaks_height],
+            prominence=find_peaks_prominence)
         peak.num_peaks_estimated = max(1, len(find_peaks_result[0]))
 
         stft_args['x'] = peak.coverage
         stft_args['nperseg'] = np.ceil(len(peak.coverage)
                                        / peak.num_peaks_estimated
                                        ).astype(int)
-        stft_args['noverlap'] = min(10, stft_args['nperseg']-1)
+        stft_args['noverlap'] = min(stft_noverlap,
+                                    stft_args['nperseg']-1)
 
         deconvolute_peak_with_STFT(peak, stft_args, eval_params_peak_lengths)
